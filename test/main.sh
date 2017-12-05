@@ -26,10 +26,20 @@ function cleanup() {
         RESULT=failure
     fi
     umount roots >& /dev/null || true
-    rm -rf roots .stacker >& /dev/null || true
+    rm -rf roots >& /dev/null || true
+    if [ -z "$STACKER_KEEP" ]; then
+        rm -rf .stacker >& /dev/null || true
+    else
+        rm -rf .stacker/logs .stacker/btrfs.loop
+    fi
     echo done with testing: $RESULT
 }
 trap cleanup EXIT HUP INT TERM
+
+# clean up old logs if they exist
+if [ -n "$STACKER_KEEP" ]; then
+    rm -rf .stacker/logs .stacker/btrfs.loop
+fi
 
 set -x
 
@@ -37,12 +47,12 @@ stacker build --leave-unladen -f ./basic.yaml
 [ -d roots/centos ]
 
 # did we really download the image?
-[ -f .stacker/layer-bases/aHR0cDovL2ZpbGVzLnR5Y2hvLndzL2NlbnRvcy50YXIueHo= ]
+[ -f .stacker/layer-bases/centos.tar.xz ]
 
 # did we do a copy correctly?
-[ "$(sha .stacker/imports/centos/$(echo -n ./basic.yaml | base64))" == "$(sha ./basic.yaml)" ]
+[ "$(sha .stacker/imports/centos/basic.yaml)" == "$(sha ./basic.yaml)" ]
 
 # did run actually copy the favicon to the right place?
-[ "$(sha .stacker/imports/centos/$(echo -n https://www.cisco.com/favicon.ico | base64))" == "$(sha roots/centos/favicon.ico)" ]
+[ "$(sha .stacker/imports/centos/favicon.ico)" == "$(sha roots/centos/favicon.ico)" ]
 
 RESULT=success
