@@ -18,11 +18,15 @@ function sha() {
 
 function cleanup() {
     set +x
-    umount roots >& /dev/null || true
-    rm -rf roots .stacker >& /dev/null || true
     if [ "$RESULT" != "success" ]; then
+        if [ -n "$STACKER_INSPECT" ]; then
+            echo "waiting for inspection; press enter to continue cleanup"
+            read -r foo
+        fi
         RESULT=failure
     fi
+    umount roots >& /dev/null || true
+    rm -rf roots .stacker >& /dev/null || true
     echo done with testing: $RESULT
 }
 trap cleanup EXIT HUP INT TERM
@@ -37,5 +41,8 @@ stacker build --leave-unladen -f ./basic.yaml
 
 # did we do a copy correctly?
 [ "$(sha .stacker/imports/centos/$(echo -n ./basic.yaml | base64))" == "$(sha ./basic.yaml)" ]
+
+# did run actually copy the favicon to the right place?
+[ "$(sha .stacker/imports/centos/$(echo -n https://www.cisco.com/favicon.ico | base64))" == "$(sha roots/centos/favicon.ico)" ]
 
 RESULT=success
