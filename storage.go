@@ -8,6 +8,13 @@ import (
 	"path"
 	"strconv"
 	"syscall"
+	"io"
+)
+
+type DiffStrategy int
+
+const (
+	NativeDiff DiffStrategy = iota
 )
 
 type Storage interface {
@@ -16,6 +23,7 @@ type Storage interface {
 	Snapshot(source string, target string) error
 	Restore(source string, target string) error
 	Delete(path string) error
+	Diff(strategy DiffStrategy, source string, target string) (io.Reader, error)
 	Detach() error
 }
 
@@ -143,6 +151,51 @@ func (b *btrfs) Delete(source string) error {
 	}
 
 	return nil
+}
+
+type cmdRead struct {
+	cmd *exec.Cmd
+	stdout io.ReadCloser
+	done bool
+}
+
+func (crc *cmdRead) Read(p []byte) (int, error) {
+	if crc.done {
+		return 0, io.EOF
+	}
+
+	n, err := crc.stdout.Read(p)
+	if err == io.EOF {
+		crc.done = true
+		err := crc.cmd.Wait()
+		if err != nil {
+			return n, fmt.Errorf("EOF and %s", err)
+		}
+	}
+
+	return n, err
+}
+
+func (b *btrfs) Diff(strategy DiffStrategy, source string, target string) (io.Reader, error) {
+	// for now we can ignore strategy, since there is only one
+	args := []string{"send"}
+	if source != "" {
+		args = append(args, "-p", source)
+	}
+	args = append(args, target)
+
+	cmd := exec.Command("btrfs", args...)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+
+	err = cmd.Start()
+	if err != nil {
+		return nil, err
+	}
+
+	return &cmdRead{cmd: cmd, stdout: stdout}, nil
 }
 
 func (b *btrfs) Detach() error {

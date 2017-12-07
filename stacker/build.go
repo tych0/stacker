@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/anuvu/stacker"
+	"github.com/openSUSE/umoci"
 	"github.com/urfave/cli"
 )
 
@@ -44,7 +46,14 @@ func doBuild(ctx *cli.Context) error {
 		return err
 	}
 
+	oci, err := umoci.CreateLayout(config.OCIDir)
+	if err != nil {
+		return err
+	}
+
 	defer s.Delete("working")
+	results := map[string]string{}
+
 	for _, name := range order {
 		l := sf[name]
 
@@ -78,7 +87,39 @@ func doBuild(ctx *cli.Context) error {
 		if err := s.Snapshot(".working", name); err != nil {
 			return err
 		}
-		fmt.Printf("image %s built successfully\n", name)
+		fmt.Printf("filesystem %s built successfully\n", name)
+
+		var diff io.Reader
+		if l.From.Type == stacker.BuiltType {
+			diff, err = s.Diff(stacker.NativeDiff, l.From.Tag, name)
+			if err != nil {
+				return err
+			}
+		} else {
+			diff, err = s.Diff(stacker.NativeDiff, "", name)
+			if err != nil {
+				return err
+			}
+		}
+
+		hash, err := oci.AddBlob(diff)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("added blob %s", hash)
+
+		deps := []string{}
+		for cur := l; cur.From.Type == stacker.BuiltType; cur = sf[cur.From.Tag] {
+			if cur.From.Type != stacker.BuiltType {
+				break
+			}
+
+			deps = append([]string{results[cur.From.Tag]}, deps...)
+		}
+
+		if err := oci.NewImage(name, deps); err != nil {
+			return err
+		}
 	}
 
 	return nil
