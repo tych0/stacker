@@ -14,11 +14,6 @@ var buildCmd = cli.Command{
 	Usage:  "builds a new OCI image from a stacker yaml file",
 	Action: doBuild,
 	Flags: []cli.Flag{
-		cli.StringFlag{
-			Name:  "stacker-file, f",
-			Usage: "the input stackerfile",
-			Value: "stacker.yaml",
-		},
 		cli.BoolFlag{
 			Name:  "leave-unladen",
 			Usage: "leave the built rootfs mount after image building",

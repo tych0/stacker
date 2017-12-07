@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"syscall"
 	"io"
+	"io/ioutil"
 )
 
 type DiffStrategy int
@@ -23,7 +24,8 @@ type Storage interface {
 	Snapshot(source string, target string) error
 	Restore(source string, target string) error
 	Delete(path string) error
-	Diff(strategy DiffStrategy, source string, target string) (io.Reader, error)
+	Diff(DiffStrategy, string, string) (io.Reader, error)
+	Undiff(DiffStrategy, io.Reader) error
 	Detach() error
 }
 
@@ -117,6 +119,7 @@ func (b *btrfs) Snapshot(source string, target string) error {
 		"btrfs",
 		"subvolume",
 		"snapshot",
+		"-r",
 		path.Join(b.c.RootFSDir, source),
 		path.Join(b.c.RootFSDir, target)).CombinedOutput()
 	if err != nil {
@@ -156,6 +159,7 @@ func (b *btrfs) Delete(source string) error {
 type cmdRead struct {
 	cmd *exec.Cmd
 	stdout io.ReadCloser
+	stderr io.ReadCloser
 	done bool
 }
 
@@ -167,8 +171,13 @@ func (crc *cmdRead) Read(p []byte) (int, error) {
 	n, err := crc.stdout.Read(p)
 	if err == io.EOF {
 		crc.done = true
+		content, err2 := ioutil.ReadAll(crc.stderr)
 		err := crc.cmd.Wait()
 		if err != nil {
+			if err2 == nil {
+				return n, fmt.Errorf("EOF and %s: %s", err, string(content))
+			}
+
 			return n, fmt.Errorf("EOF and %s", err)
 		}
 	}
@@ -176,16 +185,31 @@ func (crc *cmdRead) Read(p []byte) (int, error) {
 	return n, err
 }
 
+func (crc *cmdRead) Close() error {
+	crc.stdout.Close()
+	crc.stderr.Close()
+	if !crc.done {
+		return crc.cmd.Wait()
+	}
+
+	return nil
+}
+
 func (b *btrfs) Diff(strategy DiffStrategy, source string, target string) (io.Reader, error) {
 	// for now we can ignore strategy, since there is only one
 	args := []string{"send"}
 	if source != "" {
-		args = append(args, "-p", source)
+		args = append(args, "-p", path.Join(b.c.RootFSDir, source))
 	}
-	args = append(args, target)
+	args = append(args, path.Join(b.c.RootFSDir, target))
 
 	cmd := exec.Command("btrfs", args...)
 	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+
+	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +219,43 @@ func (b *btrfs) Diff(strategy DiffStrategy, source string, target string) (io.Re
 		return nil, err
 	}
 
-	return &cmdRead{cmd: cmd, stdout: stdout}, nil
+	return &cmdRead{cmd: cmd, stdout: stdout, stderr: stderr}, nil
+}
+
+func (b *btrfs) Undiff(strategy DiffStrategy, r io.Reader) error {
+	cmd := exec.Command("btrfs", "receive", b.c.RootFSDir)
+
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return err
+	}
+
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return err
+	}
+
+	err = cmd.Start()
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(stdin, r)
+	if err != nil {
+		return err
+	}
+
+	content, err2 := ioutil.ReadAll(stderr)
+	err = cmd.Wait()
+	if err != nil {
+		if err2 == nil {
+			return fmt.Errorf("btrfs receive: %s: %s", err, string(content))
+		}
+
+		return fmt.Errorf("btrfs receive: %s", err)
+	}
+
+	return nil
 }
 
 func (b *btrfs) Detach() error {

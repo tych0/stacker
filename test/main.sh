@@ -26,7 +26,7 @@ function cleanup() {
         RESULT=failure
     fi
     umount roots >& /dev/null || true
-    rm -rf roots oci >& /dev/null || true
+    rm -rf roots >& /dev/null || true
     if [ -z "$STACKER_KEEP" ]; then
         rm -rf .stacker >& /dev/null || true
     else
