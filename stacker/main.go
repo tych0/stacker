@@ -37,11 +37,6 @@ func main() {
 			Usage: "set the directory for the rootfs output",
 			Value: "roots",
 		},
-		cli.StringFlag{
-			Name:  "stacker-file, f",
-			Usage: "the input stackerfile",
-			Value: "stacker.yaml",
-		},
 	}
 
 	app.Before = func(ctx *cli.Context) error {
@@ -59,6 +54,8 @@ func main() {
 		if err != nil {
 			return err
 		}
+
+		fmt.Println(ctx.String("f"))
 
 		user, err := user.Current()
 		if err != nil {

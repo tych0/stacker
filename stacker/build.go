@@ -18,6 +18,11 @@ var buildCmd = cli.Command{
 			Name:  "leave-unladen",
 			Usage: "leave the built rootfs mount after image building",
 		},
+		cli.StringFlag{
+			Name:  "stacker-file, f",
+			Usage: "the input stackerfile",
+			Value: "stacker.yaml",
+		},
 	},
 }
 
@@ -47,7 +52,7 @@ func doBuild(ctx *cli.Context) error {
 	}
 
 	defer s.Delete("working")
-	results := map[string]string{}
+	results := map[string]umoci.Layer{}
 
 	for _, name := range order {
 		l := sf[name]
@@ -97,21 +102,20 @@ func doBuild(ctx *cli.Context) error {
 			}
 		}
 
-		hash, err := oci.AddBlob(diff)
+		layer, err := oci.PutBlob(diff)
 		if err != nil {
 			return err
 		}
-		fmt.Printf("added blob %s", hash)
 
-		deps := []string{}
+		fmt.Printf("added blob %s\n", layer)
+		results[name] = layer
+
+		deps := []umoci.Layer{layer}
 		for cur := l; cur.From.Type == stacker.BuiltType; cur = sf[cur.From.Tag] {
-			if cur.From.Type != stacker.BuiltType {
-				break
-			}
-
-			deps = append([]string{results[cur.From.Tag]}, deps...)
+			deps = append([]umoci.Layer{results[cur.From.Tag]}, deps...)
 		}
 
+		fmt.Printf("got deps: %v", deps)
 		if err := oci.NewImage(name, deps); err != nil {
 			return err
 		}

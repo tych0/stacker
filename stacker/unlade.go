@@ -1,11 +1,11 @@
 package main
 
 import (
-	"fmt"
-	"io"
+	//"fmt"
+	//"io"
 
-	"github.com/anuvu/stacker"
-	"github.com/openSUSE/umoci"
+	//"github.com/anuvu/stacker"
+	//"github.com/openSUSE/umoci"
 	"github.com/urfave/cli"
 )
 
@@ -17,6 +17,7 @@ var unladeCmd = cli.Command{
 }
 
 func doUnlade(ctx *cli.Context) error {
+	/*
 	file := ctx.String("f")
 	sf, err := stacker.NewStackerfile(file)
 	if err != nil {
@@ -37,8 +38,7 @@ func doUnlade(ctx *cli.Context) error {
 	if err != nil {
 		return err
 	}
+	*/
 
-	for _, tag := range tags {
-		
-	}
+	return nil
 }
