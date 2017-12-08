@@ -44,7 +44,6 @@ fi
 set -x
 
 stacker build --leave-unladen -f ./basic.yaml
-[ -d roots/centos ]
 
 # did we really download the image?
 [ -f .stacker/layer-bases/centos.tar.xz ]
@@ -52,7 +51,17 @@ stacker build --leave-unladen -f ./basic.yaml
 # did we do a copy correctly?
 [ "$(sha .stacker/imports/centos/basic.yaml)" == "$(sha ./basic.yaml)" ]
 
-# did run actually copy the favicon to the right place?
-[ "$(sha .stacker/imports/centos/favicon.ico)" == "$(sha roots/centos/favicon.ico)" ]
+function check_image() {
+    # did run actually copy the favicon to the right place?
+    [ "$(sha .stacker/imports/centos/favicon.ico)" == "$(sha roots/centos/favicon.ico)" ]
+}
+
+check_image
+
+umount roots
+rm -rf .stacker/btrfs.loop
+stacker unlade
+
+check_image
 
 RESULT=success

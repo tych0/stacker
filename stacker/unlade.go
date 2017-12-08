@@ -1,12 +1,13 @@
 package main
 
 import (
-	//"fmt"
-	//"io"
+	"fmt"
+	"io"
 
-	//"github.com/anuvu/stacker"
-	//"github.com/openSUSE/umoci"
+	"github.com/anuvu/stacker"
+	"github.com/openSUSE/umoci"
 	"github.com/urfave/cli"
+	ispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 var unladeCmd = cli.Command{
@@ -17,13 +18,6 @@ var unladeCmd = cli.Command{
 }
 
 func doUnlade(ctx *cli.Context) error {
-	/*
-	file := ctx.String("f")
-	sf, err := stacker.NewStackerfile(file)
-	if err != nil {
-		return err
-	}
-
 	s, err := stacker.NewStorage(config)
 	if err != nil {
 		return err
@@ -38,7 +32,35 @@ func doUnlade(ctx *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	*/
+
+	for _, tag := range tags {
+		blobs, err := oci.LayersForTag(tag)
+		if err != nil {
+			return err
+		}
+
+		for _, b := range blobs {
+			defer b.Close()
+		}
+
+		for _, b := range blobs {
+			if b.MediaType != ispec.MediaTypeImageLayer {
+				return fmt.Errorf("bad blob type %s", b.MediaType)
+			}
+
+			reader, ok := b.Data.(io.ReadCloser)
+			if !ok {
+				return fmt.Errorf("couldn't cast blob data to reader")
+			}
+
+			defer reader.Close()
+
+			err = s.Undiff(stacker.NativeDiff, reader)
+			if err != nil {
+				return err
+			}
+		}
+	}
 
 	return nil
 }
