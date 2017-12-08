@@ -223,17 +223,19 @@ func (b *btrfs) Diff(strategy DiffStrategy, source string, target string) (io.Re
 }
 
 func (b *btrfs) Undiff(strategy DiffStrategy, r io.Reader) error {
-	cmd := exec.Command("btrfs", "receive", b.c.RootFSDir)
+	cmd := exec.Command("btrfs", "receive", "-e", b.c.RootFSDir)
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return err
 	}
+	defer stdin.Close()
 
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		return err
 	}
+	defer stderr.Close()
 
 	err = cmd.Start()
 	if err != nil {

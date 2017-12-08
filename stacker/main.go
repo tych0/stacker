@@ -19,6 +19,7 @@ func main() {
 	app.Version = "0.0.1"
 	app.Commands = []cli.Command{
 		buildCmd,
+		unladeCmd,
 	}
 
 	app.Flags = []cli.Flag{
