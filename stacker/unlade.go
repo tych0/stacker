@@ -7,7 +7,6 @@ import (
 	"github.com/anuvu/stacker"
 	"github.com/openSUSE/umoci"
 	"github.com/urfave/cli"
-	ispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 var unladeCmd = cli.Command{
@@ -44,7 +43,7 @@ func doUnlade(ctx *cli.Context) error {
 		}
 
 		for _, b := range blobs {
-			if b.MediaType != ispec.MediaTypeImageLayer {
+			if b.MediaType != stacker.MediaTypeImageBtrfsLayer {
 				return fmt.Errorf("bad blob type %s", b.MediaType)
 			}
 

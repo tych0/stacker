@@ -8,6 +8,10 @@ import (
 	"github.com/anmitsu/go-shlex"
 )
 
+const (
+	MediaTypeImageBtrfsLayer = "application/vnd.cisco.image.layer.btrfs"
+)
+
 // StackerConfig is a struct that contains global (or widely used) stacker
 // config options.
 type StackerConfig struct {

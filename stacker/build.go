@@ -149,7 +149,7 @@ func doBuild(ctx *cli.Context) error {
 		g.ClearConfigEnv()
 		g.AddConfigEnv("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin/bin")
 
-		if err := oci.NewImage(name, g, deps); err != nil {
+		if err := oci.NewImage(name, g, deps, stacker.MediaTypeImageBtrfsLayer); err != nil {
 			return err
 		}
 	}
