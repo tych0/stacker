@@ -144,6 +144,11 @@ func doBuild(ctx *cli.Context) error {
 			g.SetConfigEntrypoint(cmd)
 		}
 
+		// TODO: we should probably support setting environment
+		// variables somehow, but for now let's set a sane PATH
+		g.ClearConfigEnv()
+		g.AddConfigEnv("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin/bin")
+
 		if err := oci.NewImage(name, g, deps); err != nil {
 			return err
 		}
