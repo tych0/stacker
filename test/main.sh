@@ -64,4 +64,12 @@ stacker unlade
 
 check_image
 
+# check OCI image generation
+manifest=$(cat oci/index.json | jq -r .manifests[0].digest | cut -f2 -d:)
+layer=$(cat oci/blobs/sha256/$manifest | jq -r .layers[0].digest)
+config=$(cat oci/blobs/sha256/$manifest | jq -r .config.digest | cut -f2 -d:)
+diffid=$(cat oci/blobs/sha256/$config | jq -r .rootfs.diff_ids[0])
+[ "$layer" = "$diffid" ]
+[ "$(cat oci/blobs/sha256/$config | jq -r '.config.Entrypoint | join(" ")')" = "echo hello world" ]
+
 RESULT=success

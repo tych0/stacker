@@ -3,10 +3,13 @@ package main
 import (
 	"fmt"
 	"io"
+	"time"
+	"runtime"
 
 	"github.com/anuvu/stacker"
 	"github.com/openSUSE/umoci"
 	"github.com/urfave/cli"
+	igen "github.com/openSUSE/umoci/oci/config/generate"
 )
 
 var buildCmd = cli.Command{
@@ -115,8 +118,33 @@ func doBuild(ctx *cli.Context) error {
 			deps = append([]umoci.Layer{results[cur.From.Tag]}, deps...)
 		}
 
-		fmt.Printf("got deps: %v", deps)
-		if err := oci.NewImage(name, deps); err != nil {
+		g := igen.New()
+		g.SetCreated(time.Now())
+		g.SetOS(runtime.GOOS)
+		g.SetArchitecture(runtime.GOARCH)
+		g.ClearHistory()
+
+		g.SetRootfsType("layers")
+		g.ClearRootfsDiffIDs()
+
+		for _, d := range deps {
+			digest, err := d.ToDigest()
+			if err != nil {
+				return err
+			}
+			g.AddRootfsDiffID(digest)
+		}
+
+		if l.Entrypoint != "" {
+			cmd, err := l.ParseEntrypoint()
+			if err != nil {
+				return err
+			}
+
+			g.SetConfigEntrypoint(cmd)
+		}
+
+		if err := oci.NewImage(name, g, deps); err != nil {
 			return err
 		}
 	}

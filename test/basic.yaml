@@ -7,3 +7,4 @@ centos:
         - https://www.cisco.com/favicon.ico
     run:
         - cp /stacker/favicon.ico /favicon.ico
+    entrypoint: echo hello world

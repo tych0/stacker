@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 
 	"gopkg.in/yaml.v2"
+	"github.com/anmitsu/go-shlex"
 )
 
 // StackerConfig is a struct that contains global (or widely used) stacker
@@ -36,6 +37,10 @@ type Layer struct {
 	Import     []string     `yaml:"import"`
 	Run        []string     `yaml:"run"`
 	Entrypoint string       `yaml:"entrypoint"`
+}
+
+func (l *Layer) ParseEntrypoint() ([]string, error) {
+	return shlex.Split(l.Entrypoint, true)
 }
 
 func NewStackerfile(stackerfile string) (Stackerfile, error) {
