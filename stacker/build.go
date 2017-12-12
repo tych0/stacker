@@ -5,6 +5,7 @@ import (
 	"io"
 	"time"
 	"runtime"
+	"os"
 
 	"github.com/anuvu/stacker"
 	"github.com/openSUSE/umoci"
@@ -44,12 +45,22 @@ func doBuild(ctx *cli.Context) error {
 		defer s.Detach()
 	}
 
+	buildCache, err := openCache(config)
+	if err != nil {
+		return err
+	}
+
 	order, err := sf.DependencyOrder()
 	if err != nil {
 		return err
 	}
 
-	oci, err := umoci.CreateLayout(config.OCIDir)
+	var oci *umoci.Layout
+	if _, err := os.Stat(config.OCIDir); err != nil {
+		oci, err = umoci.CreateLayout(config.OCIDir)
+	} else {
+		oci, err = umoci.OpenLayout(config.OCIDir)
+	}
 	if err != nil {
 		return err
 	}
@@ -59,6 +70,13 @@ func doBuild(ctx *cli.Context) error {
 
 	for _, name := range order {
 		l := sf[name]
+
+		cached, ok := buildCache.Lookup(l)
+		if ok {
+			fmt.Printf("found cached layer %s\n", name)
+			results[name] = cached
+			continue
+		}
 
 		s.Delete(".working")
 		fmt.Printf("building image %s...\n", name)
@@ -110,8 +128,10 @@ func doBuild(ctx *cli.Context) error {
 			return err
 		}
 
-		fmt.Printf("added blob %s\n", layer)
-		results[name] = layer
+		fmt.Printf("added blob %v\n", layer)
+		if err := buildCache.Put(l, layer); err != nil {
+			return err
+		}
 
 		deps := []umoci.Layer{layer}
 		for cur := l; cur.From.Type == stacker.BuiltType; cur = sf[cur.From.Tag] {

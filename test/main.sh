@@ -30,7 +30,7 @@ function cleanup() {
     if [ -z "$STACKER_KEEP" ]; then
         rm -rf .stacker >& /dev/null || true
     else
-        rm -rf .stacker/logs .stacker/btrfs.loop
+        rm -rf .stacker/logs .stacker/btrfs.loop .stacker/build.cache
     fi
     echo done with testing: $RESULT
 }
@@ -71,5 +71,12 @@ config=$(cat oci/blobs/sha256/$manifest | jq -r .config.digest | cut -f2 -d:)
 diffid=$(cat oci/blobs/sha256/$config | jq -r .rootfs.diff_ids[0])
 [ "$layer" = "$diffid" ]
 [ "$(cat oci/blobs/sha256/$config | jq -r '.config.Entrypoint | join(" ")')" = "echo hello world" ]
+
+# ok, now let's do the build again. it should all be the same, since it's all cached
+stacker build -f ./basic.yaml
+manifest2=$(cat oci/index.json | jq -r .manifests[0].digest | cut -f2 -d:)
+[ "$manifest" = "$manifest2" ]
+layer2=$(cat oci/blobs/sha256/$manifest | jq -r .layers[0].digest)
+[ "$layer" = "$layer2" ]
 
 RESULT=success
