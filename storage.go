@@ -16,6 +16,7 @@ type DiffStrategy int
 
 const (
 	NativeDiff DiffStrategy = iota
+	TarDiff    DiffStrategy = iota
 )
 
 type Storage interface {
@@ -210,7 +211,7 @@ func (crc *cmdRead) Close() error {
 	return nil
 }
 
-func (b *btrfs) Diff(strategy DiffStrategy, source string, target string) (io.Reader, error) {
+func (b *btrfs) nativeDiff(source string, target string) (io.Reader, error) {
 	// for now we can ignore strategy, since there is only one
 	args := []string{"send"}
 	if source != "" {
@@ -235,6 +236,13 @@ func (b *btrfs) Diff(strategy DiffStrategy, source string, target string) (io.Re
 	}
 
 	return &cmdRead{cmd: cmd, stdout: stdout, stderr: stderr}, nil
+}
+
+func (b *btrfs) Diff(strategy DiffStrategy, source string, target string) (io.Reader, error) {
+	switch strategy {
+	case NativeDiff:
+		return b.nativeDiff(source, target)
+	}
 }
 
 func (b *btrfs) Undiff(strategy DiffStrategy, r io.Reader) error {
