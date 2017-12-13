@@ -27,10 +27,18 @@ var buildCmd = cli.Command{
 			Usage: "the input stackerfile",
 			Value: "stacker.yaml",
 		},
+		cli.BoolFlag{
+			Name: "no-cache",
+			Usage: "don't use the previous build cache",
+		},
 	},
 }
 
 func doBuild(ctx *cli.Context) error {
+	if ctx.Bool("no-cache") {
+		os.Remove(config.StackerDir)
+	}
+
 	file := ctx.String("f")
 	sf, err := stacker.NewStackerfile(file)
 	if err != nil {
@@ -65,7 +73,7 @@ func doBuild(ctx *cli.Context) error {
 		return err
 	}
 
-	defer s.Delete("working")
+	defer s.Delete(".working")
 	results := map[string]umoci.Layer{}
 
 	for _, name := range order {
@@ -105,6 +113,8 @@ func doBuild(ctx *cli.Context) error {
 			return err
 		}
 
+		// Delete the old snapshot if it existed; we just did a new build.
+		s.Delete(name)
 		if err := s.Snapshot(".working", name); err != nil {
 			return err
 		}

@@ -63,6 +63,7 @@ rm -rf .stacker/btrfs.loop
 stacker unlade
 
 check_image
+umount roots
 
 # check OCI image generation
 manifest=$(cat oci/index.json | jq -r .manifests[0].digest | cut -f2 -d:)

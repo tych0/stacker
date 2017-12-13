@@ -50,14 +50,12 @@ func (c *cache) Lookup(l *stacker.Layer) (umoci.Layer, bool) {
 	if err != nil {
 		return umoci.Layer{}, false
 	}
-	fmt.Println("TYCHO: lookup", h)
 	result, ok := c.Cache[h]
 	return result, ok
 }
 
 func (c *cache) Put(l *stacker.Layer, blob umoci.Layer) error {
 	h, err := hashstructure.Hash(l, nil)
-	fmt.Println("TYCHO: put", h)
 	if err != nil {
 		return err
 	}

@@ -121,7 +121,7 @@ func (b *btrfs) Snapshot(source string, target string) error {
 		"snapshot",
 		"-r",
 		path.Join(b.c.RootFSDir, source),
-		path.Join(b.c.RootFSDir, target)).CombinedOutput()
+		targetP).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("btrfs snapshot: %s: %s", err, output)
 	}
@@ -130,6 +130,7 @@ func (b *btrfs) Snapshot(source string, target string) error {
 }
 
 func (b *btrfs) Restore(source string, target string) error {
+	fmt.Printf("restoring %s to %s\n", source, target)
 	output, err := exec.Command(
 		"btrfs",
 		"subvolume",
@@ -138,6 +139,20 @@ func (b *btrfs) Restore(source string, target string) error {
 		path.Join(b.c.RootFSDir, target)).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("btrfs restore: %s: %s", err, output)
+	}
+
+	// Since we create snapshots as readonly above, we must re-mark them
+	// writable here.
+	output, err = exec.Command(
+		"btrfs",
+		"property",
+		"set",
+		"-ts",
+		path.Join(b.c.RootFSDir, target),
+		"ro",
+		"false").CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("btrfs mark writable: %s: %s", err, output)
 	}
 
 	return nil
