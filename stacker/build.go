@@ -139,6 +139,7 @@ func doBuild(ctx *cli.Context) error {
 		}
 
 		fmt.Printf("added blob %v\n", layer)
+		results[name] = layer
 		if err := buildCache.Put(l, layer); err != nil {
 			return err
 		}

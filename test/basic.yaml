@@ -8,3 +8,9 @@ centos:
     run:
         - cp /stacker/favicon.ico /favicon.ico
     entrypoint: echo hello world
+layer1:
+    from:
+        type: built
+        tag: centos
+    run:
+        - rm /favicon.ico

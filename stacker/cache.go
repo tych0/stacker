@@ -5,7 +5,6 @@ import (
 	"os"
 	"path"
 	"io/ioutil"
-	"fmt"
 
 	"github.com/openSUSE/umoci"
 	"github.com/anuvu/stacker"

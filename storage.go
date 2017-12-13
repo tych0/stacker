@@ -121,7 +121,7 @@ func (b *btrfs) Snapshot(source string, target string) error {
 		"snapshot",
 		"-r",
 		path.Join(b.c.RootFSDir, source),
-		targetP).CombinedOutput()
+		path.Join(b.c.RootFSDir, target)).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("btrfs snapshot: %s: %s", err, output)
 	}

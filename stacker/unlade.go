@@ -32,6 +32,8 @@ func doUnlade(ctx *cli.Context) error {
 		return err
 	}
 
+	imported := map[string]bool{}
+
 	for _, tag := range tags {
 		blobs, err := oci.LayersForTag(tag)
 		if err != nil {
@@ -53,6 +55,14 @@ func doUnlade(ctx *cli.Context) error {
 			}
 
 			defer reader.Close()
+
+			d := string(b.Digest)
+			_, ok = imported[d]
+			if ok {
+				continue
+			} else {
+				imported[d] = true
+			}
 
 			err = s.Undiff(stacker.NativeDiff, reader)
 			if err != nil {

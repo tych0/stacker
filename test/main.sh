@@ -54,6 +54,8 @@ stacker build --leave-unladen -f ./basic.yaml
 function check_image() {
     # did run actually copy the favicon to the right place?
     [ "$(sha .stacker/imports/centos/favicon.ico)" == "$(sha roots/centos/favicon.ico)" ]
+
+    [ ! -f .stacker/imports/layer1/favicon.ico ]
 }
 
 check_image
