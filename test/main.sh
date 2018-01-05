@@ -104,4 +104,10 @@ stacker build --leave-unladen -f ./import-docker.yaml
 umoci unpack --image oci:layer1 dest
 [ ! -f dest/rootfs/favicon.ico ]
 
+cleanup
+
+# Ok, now let's try a rootless stacker.
+sudo -u $SUDO_USER stacker build -f ./import-docker.yaml
+umoci unpack --image oci:layer1 dest
+
 RESULT=success

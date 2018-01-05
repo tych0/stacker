@@ -67,7 +67,7 @@ func main() {
 		}
 
 		if user.Uid != "0" {
-			return fmt.Errorf("must be root to use stacker")
+			fmt.Println("WARNING: rootless support experimental")
 		}
 
 		return nil

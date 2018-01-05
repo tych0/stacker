@@ -57,7 +57,6 @@ func getDocker(o BaseLayerOpts) error {
 		"--insecure-policy",
 		"copy",
 		o.Layer.From.Url,
-		//fmt.Sprintf("oci:%s:%s", o.Config.OCIDir, tag),
 		fmt.Sprintf("oci:%s:%s", cacheDir, tag),
 	)
 
@@ -84,20 +83,15 @@ func getDocker(o BaseLayerOpts) error {
 
 	target := path.Join(o.Config.RootFSDir, o.Target)
 	fmt.Println("unpacking to", target)
+	image := fmt.Sprintf("%s:%s", o.Config.OCIDir, tag)
+	args := []string{"umoci", "unpack", "--image", image, target}
 
-	cmd = exec.Command(
-		"umoci",
-		"unpack",
-		"--image",
-		fmt.Sprintf("%s:%s", o.Config.OCIDir, tag),
-		path.Join(o.Config.RootFSDir, o.Target))
-
-	output, err = cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("error during unpack: %s: %s", err, string(output))
-	}
-
-	return nil
+	// Now a slight hack. What umoci calls "rootless" containers is not
+	// actually using user namespaces properly: it just leaves notes to
+	// itself to chown things back to the right user when repacking. Since
+	// we're going to actually run stuff in a user namespace, we really do
+	// want the files owned by the users in the user namespace.
+	return RunInUserns(args, "during unpack")
 }
 
 func getTar(o BaseLayerOpts) error {
@@ -137,6 +131,7 @@ func getTar(o BaseLayerOpts) error {
 		return err
 	}
 
+	// TODO: make this respect ID maps
 	output, err = exec.Command("tar", "xf", tar, "-C", layerPath).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("error: %s: %s", err, string(output))

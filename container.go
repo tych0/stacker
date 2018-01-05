@@ -11,14 +11,30 @@ import (
 
 	"github.com/pkg/errors"
 	"gopkg.in/lxc/go-lxc.v2"
+	"github.com/lxc/lxd/shared/idmap"
+	rspec "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/openSUSE/umoci/oci/layer"
 )
 
 const ReasonableDefaultPath = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin/bin"
+var (
+	idmapSet *idmap.IdmapSet
+)
+
+func init() {
+	if os.Geteuid() != 0 {
+		var err error
+		idmapSet, err = idmap.DefaultIdmapSet()
+		if err != nil {
+			panic(err)
+		}
+	}
+}
 
 // our representation of a container
 type container struct {
-	sc StackerConfig
-	c  *lxc.Container
+	sc    StackerConfig
+	c     *lxc.Container
 }
 
 func newContainer(sc StackerConfig, name string) (*container, error) {
@@ -37,14 +53,40 @@ func newContainer(sc StackerConfig, name string) (*container, error) {
 		return nil, err
 	}
 
+	if err := c.c.SetLogLevel(lxc.TRACE); err != nil {
+		return nil, err
+	}
+
 	err = c.c.SetLogFile(path.Join(sc.StackerDir, "logs", name))
 	if err != nil {
 		return nil, err
 	}
 
-	err = c.c.SetLogLevel(lxc.TRACE)
-	if err != nil {
-		return nil, err
+	if idmapSet != nil {
+		for _, idm := range idmapSet.Idmap {
+			if err := idm.Usable(); err != nil {
+				return nil, fmt.Errorf("idmap unusable: %s", err)
+			}
+		}
+
+		for _, lxcConfig := range idmapSet.ToLxcString() {
+			err = c.setConfig("lxc.id_map", lxcConfig)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		// If we're in a userns, we need to be sure and make sure the
+		// rootfs pivot dir is somewhere that we can actually write to.
+		// Let's use .stacker/rootfs instead of /var/lib/lxc/rootfs
+		rootfsPivot := path.Join(sc.StackerDir, "rootfsPivot")
+		if err := os.MkdirAll(rootfsPivot, 0755); err != nil {
+			return nil, err
+		}
+
+		if err := c.setConfig("lxc.rootfs.mount", rootfsPivot); err != nil {
+			return nil, err
+		}
 	}
 
 	configs := map[string]string{
@@ -161,6 +203,67 @@ func (c *container) execute(args string) error {
 
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("run commands failed: %s", err)
+	}
+
+	return nil
+}
+
+func umociMapOptions() *layer.MapOptions {
+	os := &layer.MapOptions{}
+	if idmapSet == nil {
+		return os
+	}
+
+	os.UIDMappings = []rspec.LinuxIDMapping{}
+	os.GIDMappings = []rspec.LinuxIDMapping{}
+	os.Rootless = true
+
+	for _, ide := range idmapSet.Idmap {
+		if ide.Isuid {
+			os.UIDMappings = append(os.UIDMappings, rspec.LinuxIDMapping{
+				HostID:      uint32(ide.Hostid),
+				ContainerID: uint32(ide.Nsid),
+				Size:        uint32(ide.Maprange),
+			})
+		}
+
+		if ide.Isgid {
+			os.GIDMappings = append(os.GIDMappings, rspec.LinuxIDMapping{
+				HostID:      uint32(ide.Hostid),
+				ContainerID: uint32(ide.Nsid),
+				Size:        uint32(ide.Maprange),
+			})
+		}
+	}
+
+	return os
+}
+
+func RunInUserns(userCmd []string, msg string) error {
+	args := []string{
+		"-m",
+		fmt.Sprintf("b:100000:%d:1", os.Getuid()),
+	}
+
+	for _, idm := range idmapSet.Idmap {
+		var which string
+		if idm.Isuid && idm.Isgid {
+			which = "b"
+		} else if idm.Isuid {
+			which = "u"
+		} else if idm.Isgid {
+			which = "g"
+		}
+
+		m := fmt.Sprintf("%s:%d:%d:%d", which, idm.Nsid, idm.Hostid, idm.Maprange)
+		args = append(args, "-m", m)
+	}
+
+	args = append(args, "--", userCmd...)
+	cmd := exec.Command("lxc-usernsexec", args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("error %s: %s: %s", msg, err, string(output))
 	}
 
 	return nil
