@@ -43,6 +43,12 @@ func main() {
 			Usage: "set the directory for the rootfs output",
 			Value: "roots",
 		},
+		cli.BoolFlag{
+			Name:  "internal-in-userns",
+			Usage: "don't use this; stacker internal only!",
+			Hidden: true,
+			Value: false,
+		}
 	}
 
 	app.Before = func(ctx *cli.Context) error {
