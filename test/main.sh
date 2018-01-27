@@ -107,7 +107,18 @@ umoci unpack --image oci:layer1 dest
 cleanup
 
 # Ok, now let's try a rootless stacker.
-sudo -u $SUDO_USER stacker build -f ./import-docker.yaml
+truncate -s 100G .stacker/btrfs.loop
+mkfs.btrfs .stacker/btrfs.loop
+mkdir -p roots
+mount -o loop .stacker/btrfs.loop roots
+chown -R $SUDO_USER:$SUDO_USER roots
+chown -R $SUDO_USER:$SUDO_USER .stacker
+sudo -u $SUDO_USER $GOPATH/bin/stacker build -f ./import-docker.yaml
 umoci unpack --image oci:layer1 dest
+
+[ "$(sha .stacker/imports/centos/favicon.ico)" == "$(sha roots/centos/rootfs/favicon.ico)" ]
+[ ! -f dest/rootfs/favicon.ico ]
+
+cleanup
 
 RESULT=success

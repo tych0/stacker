@@ -16,18 +16,23 @@ import (
 	"github.com/openSUSE/umoci/oci/layer"
 )
 
-const ReasonableDefaultPath = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin/bin"
+const (
+	ReasonableDefaultPath = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin/bin"
+	// When calling RunInUserns, this is the uid that the host uid of
+	// stacker is mapped to.
+	HostIDInUserns = 100000
+)
 var (
-	idmapSet *idmap.IdmapSet
+	IdmapSet *idmap.IdmapSet
 )
 
 func init() {
 	if os.Geteuid() != 0 {
-		var err error
-		idmapSet, err = idmap.DefaultIdmapSet()
-		if err != nil {
-			panic(err)
-		}
+		// An error here means that this user has no subuid
+		// delegations. The only thing we can do is panic, and if we're
+		// re-execing inside a user namespace we don't want to do that.
+		// So let's just ignore the error and let future code handle it.
+		IdmapSet, _ = idmap.DefaultIdmapSet()
 	}
 }
 
@@ -62,14 +67,14 @@ func newContainer(sc StackerConfig, name string) (*container, error) {
 		return nil, err
 	}
 
-	if idmapSet != nil {
-		for _, idm := range idmapSet.Idmap {
+	if IdmapSet != nil {
+		for _, idm := range IdmapSet.Idmap {
 			if err := idm.Usable(); err != nil {
 				return nil, fmt.Errorf("idmap unusable: %s", err)
 			}
 		}
 
-		for _, lxcConfig := range idmapSet.ToLxcString() {
+		for _, lxcConfig := range IdmapSet.ToLxcString() {
 			err = c.setConfig("lxc.id_map", lxcConfig)
 			if err != nil {
 				return nil, err
@@ -210,7 +215,7 @@ func (c *container) execute(args string) error {
 
 func umociMapOptions() *layer.MapOptions {
 	os := &layer.MapOptions{}
-	if idmapSet == nil {
+	if IdmapSet == nil {
 		return os
 	}
 
@@ -218,7 +223,7 @@ func umociMapOptions() *layer.MapOptions {
 	os.GIDMappings = []rspec.LinuxIDMapping{}
 	os.Rootless = true
 
-	for _, ide := range idmapSet.Idmap {
+	for _, ide := range IdmapSet.Idmap {
 		if ide.Isuid {
 			os.UIDMappings = append(os.UIDMappings, rspec.LinuxIDMapping{
 				HostID:      uint32(ide.Hostid),
@@ -242,10 +247,10 @@ func umociMapOptions() *layer.MapOptions {
 func RunInUserns(userCmd []string, msg string) error {
 	args := []string{
 		"-m",
-		fmt.Sprintf("b:100000:%d:1", os.Getuid()),
+		fmt.Sprintf("b:%d:%d:1", HostIDInUserns, os.Getuid()),
 	}
 
-	for _, idm := range idmapSet.Idmap {
+	for _, idm := range IdmapSet.Idmap {
 		var which string
 		if idm.Isuid && idm.Isgid {
 			which = "b"
@@ -259,11 +264,17 @@ func RunInUserns(userCmd []string, msg string) error {
 		args = append(args, "-m", m)
 	}
 
-	args = append(args, "--", userCmd...)
+	args = append(args, "--")
+	args = append(args, userCmd...)
 	cmd := exec.Command("lxc-usernsexec", args...)
-	output, err := cmd.CombinedOutput()
+
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	err := cmd.Run()
 	if err != nil {
-		return fmt.Errorf("error %s: %s: %s", msg, err, string(output))
+		return fmt.Errorf("error %s: %s", msg, err)
 	}
 
 	return nil
