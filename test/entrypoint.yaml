@@ -1,0 +1,13 @@
+base:
+    from:
+        type: scratch
+    cmd: foo
+layer1:
+    from:
+        type: built
+        tag: centos
+    entrypoint: bar
+layer2:
+        type: built
+        tag: centos
+    real_entrypoint: baz
