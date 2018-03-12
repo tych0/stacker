@@ -6,6 +6,8 @@ import:
 - package: github.com/lxc/lxd
   subpackages:
   - shared/idmap
+  repo: https://github.com/tych0/lxd
+  version: ditch-binary-lookups
 - package: github.com/mitchellh/hashstructure
 - package: github.com/openSUSE/umoci
   subpackages:

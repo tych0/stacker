@@ -37,6 +37,7 @@ func init() {
 		// re-execing inside a user namespace we don't want to do that.
 		// So let's just ignore the error and let future code handle it.
 		IdmapSet, _ = idmap.DefaultIdmapSet(currentUser.Username)
+		fmt.Println("idmapset:", IdmapSet)
 	}
 }
 
@@ -269,13 +270,29 @@ func RunInUserns(userCmd []string, msg string) error {
 		return err
 	}
 
-	args := []string{
-		"-m",
-		fmt.Sprintf("u:%d:%d:1", id, os.Getuid()),
-		"-m",
-		fmt.Sprintf("g:%d:%d:1", id, os.Getgid()),
+	hostMap := []idmap.IdmapEntry{
+		idmap.IdmapEntry{
+			Isuid:    true,
+			Hostid:   int64(os.Getuid()),
+			Nsid:     id,
+			Maprange: 1,
+		},
+		idmap.IdmapEntry{
+			Isgid:    true,
+			Hostid:   int64(os.Getgid()),
+			Nsid:     id,
+			Maprange: 1,
+		},
 	}
 
+	for _, hm := range hostMap {
+		err = IdmapSet.AddSafe(hm)
+		if err != nil {
+			return err
+		}
+	}
+
+	args := []string{}
 	for _, idm := range IdmapSet.Idmap {
 		var which string
 		if idm.Isuid && idm.Isgid {
@@ -292,6 +309,7 @@ func RunInUserns(userCmd []string, msg string) error {
 
 	args = append(args, "--")
 	args = append(args, userCmd...)
+	fmt.Println("running", args)
 	cmd := exec.Command("lxc-usernsexec", args...)
 
 	cmd.Stdin = os.Stdin
