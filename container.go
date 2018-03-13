@@ -36,7 +36,34 @@ func init() {
 		// delegations. The only thing we can do is panic, and if we're
 		// re-execing inside a user namespace we don't want to do that.
 		// So let's just ignore the error and let future code handle it.
-		IdmapSet, err = idmap.DefaultIdmapSet(currentUser.Username)
+		IdmapSet, _ = idmap.DefaultIdmapSet(currentUser.Username)
+
+		if IdmapSet != nil {
+			/* Let's make our current user the root user in the ns, so that when
+			 * stacker emits files, it does them as the right user.
+			 */
+			hostMap := []idmap.IdmapEntry{
+				idmap.IdmapEntry{
+					Isuid:    true,
+					Hostid:   int64(os.Getuid()),
+					Nsid:     0,
+					Maprange: 1,
+				},
+				idmap.IdmapEntry{
+					Isgid:    true,
+					Hostid:   int64(os.Getgid()),
+					Nsid:     0,
+					Maprange: 1,
+				},
+			}
+
+			for _, hm := range hostMap {
+				err := IdmapSet.AddSafe(hm)
+				if err != nil {
+					return
+				}
+			}
+		}
 	}
 }
 
@@ -99,7 +126,7 @@ func newContainer(sc StackerConfig, name string) (*container, error) {
 	}
 
 	configs := map[string]string{
-		"lxc.mount.auto":  "proc:mixed sys:mixed cgroup:mixed",
+		"lxc.mount.auto":  "proc:mixed cgroup:mixed",
 		"lxc.autodev":     "1",
 		"lxc.uts.name":    name,
 		"lxc.net.0.type":  "none",
@@ -129,6 +156,11 @@ func newContainer(sc StackerConfig, name string) (*container, error) {
 				return nil, err
 			}
 		}
+	}
+
+	err = c.bindMount("/sys", "/sys")
+	if err != nil {
+		return nil, err
 	}
 
 	rootfs := path.Join(sc.RootFSDir, name, "rootfs")
@@ -269,32 +301,7 @@ func umociMapOptions() *layer.MapOptions {
 
 func RunInUserns(userCmd []string, msg string) error {
 	if IdmapSet == nil {
-		return fmt.Errorf("null idmapset")
-	}
-
-	/* Let's make our current user the root user in the ns, so that when
-	 * stacker emits files, it does them as the right user.
-	 */
-	hostMap := []idmap.IdmapEntry{
-		idmap.IdmapEntry{
-			Isuid:    true,
-			Hostid:   int64(os.Getuid()),
-			Nsid:     0,
-			Maprange: 1,
-		},
-		idmap.IdmapEntry{
-			Isgid:    true,
-			Hostid:   int64(os.Getgid()),
-			Nsid:     0,
-			Maprange: 1,
-		},
-	}
-
-	for _, hm := range hostMap {
-		err := IdmapSet.AddSafe(hm)
-		if err != nil {
-			return err
-		}
+		return fmt.Errorf("no subuids!")
 	}
 
 	args := []string{}

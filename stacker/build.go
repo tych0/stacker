@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path"
 	"runtime"
 	"strings"
@@ -154,15 +153,15 @@ func doBuild(ctx *cli.Context) error {
 		}
 
 		fmt.Println("generating layer...")
-		cmd := exec.Command(
+		args := []string{
 			"umoci",
 			"repack",
 			"--image",
 			fmt.Sprintf("%s:%s", config.OCIDir, name),
-			path.Join(config.RootFSDir, ".working"))
-		output, err := cmd.CombinedOutput()
+			path.Join(config.RootFSDir, ".working")}
+		err = stacker.RunInUserns(args, "layer generation failed")
 		if err != nil {
-			return fmt.Errorf("error during repack: %s: %s", err, string(output))
+			return err
 		}
 
 		mutator, err := oci.Mutator(name)
