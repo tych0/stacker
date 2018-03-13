@@ -20,7 +20,7 @@ import (
 var buildCmd = cli.Command{
 	Name:   "build",
 	Usage:  "builds a new OCI image from a stacker yaml file",
-	Action: usernsWrapper(doBuild),
+	Action: doBuild,
 	Flags: []cli.Flag{
 		cli.BoolFlag{
 			Name:  "leave-unladen",

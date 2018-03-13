@@ -44,16 +44,23 @@ func NewStorage(c StackerConfig) (Storage, error) {
 	}
 
 	if !isBtrfs {
+		uid, err := strconv.Atoi(currentUser.Uid)
+		if err != nil {
+			return nil, err
+		}
+
+		if c.InUserns || uid != 0 {
+			// We don't have permission to mount btrfs, so let's
+			// just use rsync.
+			return &rsync{c}, nil
+		}
+
 		if err := os.MkdirAll(c.StackerDir, 0755); err != nil {
 			return nil, err
 		}
 
 		loopback := path.Join(c.StackerDir, "btrfs.loop")
 		size := 100 * 1024 * 1024 * 1024
-		uid, err := strconv.Atoi(currentUser.Uid)
-		if err != nil {
-			return nil, err
-		}
 
 		err = MakeLoopbackBtrfs(loopback, int64(size), uid, c.RootFSDir)
 		if err != nil {
@@ -245,4 +252,49 @@ func isMounted(path string) (bool, error) {
 	}
 
 	return false, nil
+}
+
+type rsync struct {
+	c StackerConfig
+}
+
+func (r *rsync) Name() string {
+	return "rsync"
+}
+
+func (r *rsync) Create(source string) error {
+	return os.MkdirAll(path.Join(r.c.RootFSDir, source), 0755)
+}
+
+func doRsync(src, dest string) error {
+	output, err := exec.Command(
+		"rsync",
+		"--archive",
+		"--hard-links",
+		"--delete",
+		fmt.Sprintf("%s/", src),
+		fmt.Sprintf("%s/", dest),
+	).CombinedOutput()
+
+	if err != nil {
+		return fmt.Errorf("couldn't rsync: %s", string(output))
+	}
+
+	return nil
+}
+
+func (r *rsync) Snapshot(source string, target string) error {
+	return doRsync(path.Join(r.c.RootFSDir, source), path.Join(r.c.RootFSDir, target))
+}
+
+func (r *rsync) Restore(source string, target string) error {
+	return doRsync(path.Join(r.c.RootFSDir, source), path.Join(r.c.RootFSDir, target))
+}
+
+func (r *rsync) Delete(source string) error {
+	return os.RemoveAll(path.Join(r.c.RootFSDir, source))
+}
+
+func (r *rsync) Detach() error {
+	return nil
 }

@@ -21,6 +21,7 @@ type StackerConfig struct {
 	StackerDir string
 	OCIDir     string
 	RootFSDir  string
+	InUserns   bool
 }
 
 type Stackerfile map[string]*Layer

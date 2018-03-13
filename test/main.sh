@@ -122,6 +122,15 @@ umoci unpack --image oci:layer1 dest
 
 cleanup
 
+# Now let's try the rsync backend.
+
+sudo -u $SUDO_USER:$SUDO_USER $GOPATH/bin/stacker build -f ./import-docker.yaml
+umoci unpack --image oci:layer1 dest
+[ "$(sha .stacker/imports/centos/favicon.ico)" == "$(sha roots/centos/rootfs/favicon.ico)" ]
+[ ! -f dest/rootfs/favicon.ico ]
+
+cleanup
+
 # Do build only layers work?
 stacker build -f buildonly.yaml
 umoci unpack --image oci:layer1 dest

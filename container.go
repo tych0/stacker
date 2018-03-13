@@ -36,25 +36,8 @@ func init() {
 		// delegations. The only thing we can do is panic, and if we're
 		// re-execing inside a user namespace we don't want to do that.
 		// So let's just ignore the error and let future code handle it.
-		IdmapSet, _ = idmap.DefaultIdmapSet(currentUser.Username)
+		IdmapSet, err = idmap.DefaultIdmapSet(currentUser.Username)
 	}
-}
-
-// HostIDInUserns returns the uid that the host uid of stacker will be mapped
-// to when calling RunInUserns.
-func HostIDInUserns() (int64, error) {
-	if IdmapSet == nil {
-		return -1, fmt.Errorf("no idmap")
-	}
-
-	max := int64(100000)
-	for _, idm := range IdmapSet.Idmap {
-		if idm.Nsid+idm.Maprange >= max {
-			max = idm.Nsid + idm.Maprange + 1
-		}
-	}
-
-	return max, nil
 }
 
 // our representation of a container
@@ -96,7 +79,7 @@ func newContainer(sc StackerConfig, name string) (*container, error) {
 		}
 
 		for _, lxcConfig := range IdmapSet.ToLxcString() {
-			err = c.setConfig("lxc.id_map", lxcConfig)
+			err = c.setConfig("lxc.idmap", lxcConfig)
 			if err != nil {
 				return nil, err
 			}
@@ -285,17 +268,36 @@ func umociMapOptions() *layer.MapOptions {
 }
 
 func RunInUserns(userCmd []string, msg string) error {
-	id, err := HostIDInUserns()
-	if err != nil {
-		return err
+	if IdmapSet == nil {
+		return fmt.Errorf("null idmapset")
 	}
 
-	args := []string{
-		"-m",
-		fmt.Sprintf("u:%d:%d:1", id, os.Getuid()),
-		"-m",
-		fmt.Sprintf("g:%d:%d:1", id, os.Getgid()),
+	/* Let's make our current user the root user in the ns, so that when
+	 * stacker emits files, it does them as the right user.
+	 */
+	hostMap := []idmap.IdmapEntry{
+		idmap.IdmapEntry{
+			Isuid:    true,
+			Hostid:   int64(os.Getuid()),
+			Nsid:     0,
+			Maprange: 1,
+		},
+		idmap.IdmapEntry{
+			Isgid:    true,
+			Hostid:   int64(os.Getgid()),
+			Nsid:     0,
+			Maprange: 1,
+		},
 	}
+
+	for _, hm := range hostMap {
+		err := IdmapSet.AddSafe(hm)
+		if err != nil {
+			return err
+		}
+	}
+
+	args := []string{}
 
 	for _, idm := range IdmapSet.Idmap {
 		var which string
@@ -311,15 +313,17 @@ func RunInUserns(userCmd []string, msg string) error {
 		args = append(args, "-m", m)
 	}
 
+
 	args = append(args, "--")
 	args = append(args, userCmd...)
+
 	cmd := exec.Command("lxc-usernsexec", args...)
 
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	err = cmd.Run()
+	err := cmd.Run()
 	if err != nil {
 		return fmt.Errorf("error %s: %s", msg, err)
 	}
