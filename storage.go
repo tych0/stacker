@@ -267,20 +267,15 @@ func (r *rsync) Create(source string) error {
 }
 
 func doRsync(src, dest string) error {
-	output, err := exec.Command(
+	args := []string{
 		"rsync",
 		"--archive",
 		"--hard-links",
 		"--delete",
 		fmt.Sprintf("%s/", src),
 		fmt.Sprintf("%s/", dest),
-	).CombinedOutput()
-
-	if err != nil {
-		return fmt.Errorf("couldn't rsync: %s", string(output))
 	}
-
-	return nil
+	return RunInUserns(args, "rsync operation failed")
 }
 
 func (r *rsync) Snapshot(source string, target string) error {
@@ -292,7 +287,9 @@ func (r *rsync) Restore(source string, target string) error {
 }
 
 func (r *rsync) Delete(source string) error {
-	return os.RemoveAll(path.Join(r.c.RootFSDir, source))
+	// This is dumb, but we need to run this in a user namespace so it can
+	// actually delete everything.
+	return RunInUserns([]string{"rm", "-rf", path.Join(r.c.RootFSDir, source)}, "delete failed")
 }
 
 func (r *rsync) Detach() error {
