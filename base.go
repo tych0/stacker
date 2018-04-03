@@ -82,6 +82,13 @@ func getDocker(o BaseLayerOpts) error {
 		fmt.Sprintf("oci:%s:%s", o.Config.OCIDir, tag),
 	)
 
+	// Delete the tag for the base layer; we're only interested in our
+	// build layer outputs, not in the base layers.
+	err = o.OCI.DeleteTag(tag)
+	if err != nil {
+		return err
+	}
+
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("skopeo copy from cache to ocidir: %s: %s", err, string(output))
