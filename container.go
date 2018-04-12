@@ -212,10 +212,6 @@ func (c *container) setConfig(name string, value string) error {
 	return nil
 }
 
-func (c *container) logPath() string {
-	return path.Join(c.sc.StackerDir, "logs", c.c.Name())
-}
-
 // containerError tries its best to report as much context about an LXC error
 // as possible.
 func (c *container) containerError(theErr error, msg string) error {
@@ -223,7 +219,7 @@ func (c *container) containerError(theErr error, msg string) error {
 		return nil
 	}
 
-	f, err := os.Open(c.logPath())
+	f, err := os.Open(c.c.LogFile())
 	if err != nil {
 		return errors.Wrap(theErr, msg)
 	}
@@ -307,7 +303,7 @@ func (c *container) execute(args string, stdin io.Reader) error {
 	cmdErr := cmd.Run()
 	done <- true
 
-	return cmdErr
+	return c.containerError(cmdErr, "execute failed")
 }
 
 func umociMapOptions() *layer.MapOptions {
