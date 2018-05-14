@@ -12,12 +12,14 @@ import (
 	"path"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/klauspost/pgzip"
 	"github.com/openSUSE/umoci"
 	"github.com/openSUSE/umoci/oci/layer"
 	ispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"golang.org/x/sys/unix"
 )
 
 type Apply struct {
@@ -205,12 +207,75 @@ func insertOneFile(hdr *tar.Header, target string, te *layer.TarExtractor, tr io
 	// probably won't match.
 	if fi.ModTime() != hdr.ModTime && !hdr.ModTime.IsZero() {
 
-		fmt.Println("two differen mod times on %s %v %v\n", hdr.Name, fi.ModTime(), hdr.ModTime)
-		return false, nil
-		//return false, fmt.Errorf("two differen mod times on %s %v %v", hdr.Name, fi.ModTime(), hdr.ModTime)
+		// liblxc impolitely binds its own init into /tmp/.lxc-init,
+		// which changes the mtime on /tmp
+		if hdr.Name == "/tmp" {
+			return false, nil
+		}
+
+		// we bind the host's /etc/resolv.conf to inside the container
+		if hdr.Name == "/etc" || hdr.Name == "/etc/resolv.conf" {
+			return false, nil
+		}
+
+		return false, fmt.Errorf("two differen mod times on %s %v %v", hdr.Name, fi.ModTime(), hdr.ModTime)
 	}
 
-	// TODO: atime, uid, gid, xattrs
+
+	sysStat := fi.Sys().(*syscall.Stat_t)
+	// explicitly don't consider access time
+	cSec, cNsec := sysStat.Ctim.Unix()
+	ctime := time.Unix(cSec, cNsec)
+	if ctime != hdr.ChangeTime && !hdr.ChangeTime.IsZero() {
+		return false, fmt.Errorf("changed times differ on %s", hdr.Name)
+	}
+
+	if sysStat.Uid != uint32(hdr.Uid) {
+		return false, fmt.Errorf("two different uids on %s: %v %v", sysStat.Uid, hdr.Uid)
+	}
+
+	if sysStat.Gid != uint32(hdr.Gid) {
+		return false, fmt.Errorf("two different gids on %s: %v %v", sysStat.Gid, hdr.Gid)
+	}
+
+	sz, err := syscall.Listxattr(path.Join(target, hdr.Name), nil)
+	if err == nil {
+		xattrBuf := make([]byte, sz)
+		_, err = syscall.Listxattr(path.Join(target, hdr.Name), xattrBuf)
+		if err != nil {
+			return false, err
+		}
+
+		start := 0
+		xattrs := []string{}
+		for i, c := range xattrBuf {
+			if c == 0 {
+				xattrs = append(xattrs, string(xattrBuf[start:i]))
+				start = i + 1
+			}
+		}
+
+		if len(xattrs) != len(hdr.Xattrs) {
+			return false, fmt.Errorf("different xattrs for %s: %v %v", hdr.Name, xattrs, hdr.Xattrs)
+		}
+
+		for k, v := range hdr.Xattrs {
+			found := false
+			for _, xattr := range xattrs {
+				if fmt.Sprintf("%s=%s", k, v) == xattr {
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				return false, fmt.Errorf("different xattrs for %s, missing %s=%s", hdr.Name, k, v)
+			}
+		}
+
+	} else if err != syscall.ENODATA {
+		return false, err
+	}
 
 	switch hdr.Typeflag {
 	case tar.TypeDir, tar.TypeFifo:
@@ -218,7 +283,9 @@ func insertOneFile(hdr *tar.Header, target string, te *layer.TarExtractor, tr io
 		return false, nil
 	case tar.TypeChar, tar.TypeBlock:
 		if (hdr.FileInfo().Mode()&os.ModeCharDevice != 0) != (hdr.Typeflag == tar.TypeChar) {
-			// TODO make sure major/minor are hte same
+			if uint32(hdr.Devmajor) != unix.Major(sysStat.Dev) || uint32(hdr.Devminor) != unix.Minor(sysStat.Dev) {
+				return false, fmt.Errorf("device number mismatches for %s", hdr.Name)
+			}
 			return false, nil
 		}
 
