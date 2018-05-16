@@ -106,6 +106,7 @@ umoci unpack --image oci:layer1 dest
 cleanup
 
 # Ok, now let's try unprivileged stacker.
+mkdir -p .stacker
 truncate -s 100G .stacker/btrfs.loop
 mkfs.btrfs .stacker/btrfs.loop
 mkdir -p roots
