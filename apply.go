@@ -19,8 +19,8 @@ import (
 	"github.com/openSUSE/umoci/oci/casext"
 	"github.com/openSUSE/umoci/oci/layer"
 	"github.com/openSUSE/umoci/pkg/fseval"
-	ispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/opencontainers/go-digest"
+	ispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sergi/go-diff/diffmatchpatch"
 	"golang.org/x/sys/unix"
@@ -273,8 +273,8 @@ func (a *Apply) applyLayer(cacheOCI *umoci.Layout, desc ispec.Descriptor, target
 
 	manifest.Layers = append(manifest.Layers, ispec.Descriptor{
 		MediaType: blob.MediaType,
-		Digest: desc.Digest,
-		Size: desc.Size,
+		Digest:    desc.Digest,
+		Size:      desc.Size,
 	})
 
 	config, err := a.opts.OCI.LookupConfig(manifest.Config)
@@ -290,8 +290,8 @@ func (a *Apply) applyLayer(cacheOCI *umoci.Layout, desc ispec.Descriptor, target
 
 	manifest.Config = ispec.Descriptor{
 		MediaType: ispec.MediaTypeImageConfig,
-		Digest: digest,
-		Size: size,
+		Digest:    digest,
+		Size:      size,
 	}
 
 	digest, size, err = a.opts.OCI.PutBlobJSON(manifest)
@@ -301,8 +301,8 @@ func (a *Apply) applyLayer(cacheOCI *umoci.Layout, desc ispec.Descriptor, target
 
 	manifestDesc := ispec.Descriptor{
 		MediaType: ispec.MediaTypeImageManifest,
-		Digest: digest,
-		Size: size,
+		Digest:    digest,
+		Size:      size,
 	}
 	err = a.opts.OCI.UpdateReference(a.opts.Name, manifestDesc)
 	if err != nil {
