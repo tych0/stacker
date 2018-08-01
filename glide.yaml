@@ -10,8 +10,8 @@ import:
 - package: github.com/openSUSE/umoci
   subpackages:
   - oci/config/generate
-  repo: https://github.com/anuvu/umoci
-  version: api-draft
+  repo: https://github.com/tych0/umoci
+  version: api-v2
 - package: github.com/opencontainers/image-spec
   subpackages:
   - specs-go/v1

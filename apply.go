@@ -3,6 +3,7 @@ package stacker
 import (
 	"archive/tar"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"io"
@@ -16,12 +17,36 @@ import (
 
 	"github.com/klauspost/pgzip"
 	"github.com/openSUSE/umoci"
+	"github.com/openSUSE/umoci/oci/casext"
 	"github.com/openSUSE/umoci/oci/layer"
 	ispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sergi/go-diff/diffmatchpatch"
 	"golang.org/x/sys/unix"
 )
+
+func LookupManifest(oci casext.Engine, tag string) (ispec.Manifest, error) {
+	descriptorPaths, err := oci.ResolveReference(context.Background(), tag)
+	if err != nil {
+		return ispec.Manifest{}, err
+	}
+
+	if len(descriptorPaths) != 1 {
+		return ispec.Manifest{}, errors.Errorf("bad descriptor %s", tag)
+	}
+
+	blob, err := oci.FromDescriptor(context.Background(), descriptorPaths[0].Descriptor())
+	if err != nil {
+		return ispec.Manifest{}, err
+	}
+	defer blob.Close()
+
+	if blob.MediaType != ispec.MediaTypeImageManifest {
+		return ispec.Manifest{}, errors.Errorf("descriptor does not point to a manifest: %s", blob.MediaType)
+	}
+
+	return blob.Data.(ispec.Manifest), nil
+}
 
 type Apply struct {
 	layers  []ispec.Descriptor
@@ -32,7 +57,7 @@ type Apply struct {
 func NewApply(sf *Stackerfile, opts BaseLayerOpts, storage Storage) (*Apply, error) {
 	a := &Apply{layers: []ispec.Descriptor{}, opts: opts, storage: storage}
 
-	var source *umoci.Layout
+	var source casext.Engine
 
 	if opts.Layer.From.Type == DockerType || opts.Layer.From.Type == OCIType {
 		var err error
@@ -64,13 +89,13 @@ func NewApply(sf *Stackerfile, opts BaseLayerOpts, storage Storage) (*Apply, err
 		}
 	}
 
-	if source != nil {
+	if source.Engine != nil {
 		tag, err := opts.Layer.From.ParseTag()
 		if err != nil {
 			return nil, err
 		}
 
-		manifest, err := source.LookupManifest(tag)
+		manifest, err := LookupManifest(source, tag)
 		if err != nil {
 			return nil, err
 		}
@@ -122,7 +147,7 @@ func (a *Apply) applyImage(layer string) error {
 		return err
 	}
 
-	manifest, err := oci.LookupManifest(tag)
+	manifest, err := LookupManifest(oci, tag)
 	if err != nil {
 		return err
 	}
@@ -158,8 +183,8 @@ func (a *Apply) applyImage(layer string) error {
 	return nil
 }
 
-func (a *Apply) applyLayer(oci *umoci.Layout, desc ispec.Descriptor, target string) error {
-	blob, err := oci.LookupBlob(desc)
+func (a *Apply) applyLayer(oci casext.Engine, desc ispec.Descriptor, target string) error {
+	blob, err := oci.FromDescriptor(context.Background(), desc)
 	if err != nil {
 		return err
 	}
