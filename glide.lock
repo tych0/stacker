@@ -1,10 +1,10 @@
 hash: e0b297447455777d9b12b97627986b562b13ee1a100f090489dd6ae8e1d76082
-updated: 2018-06-29T11:29:40.324455183-06:00
+updated: 2018-08-06T16:01:32.422215605-06:00
 imports:
 - name: github.com/anmitsu/go-shlex
   version: 648efa622239a2f6ff949fed78ee37b48d499ba4
 - name: github.com/apex/log
-  version: ff0f66940b829dc66c81dad34746d4349b83eb9e
+  version: 941dea75d3ebfbdd905a5d8b7b232965c5e5c684
 - name: github.com/blang/semver
   version: b38d23b8782a487059e8fc8773e9a5b228a77cb6
 - name: github.com/cheggaaa/pb
@@ -14,13 +14,15 @@ imports:
 - name: github.com/docker/go-units
   version: 47565b4f722fb6ceae66b95f853feed578a4a51c
 - name: github.com/dustin/go-humanize
-  version: 02af3965c54e8cacf948b97fef38925c4120652c
+  version: 9f541cc9db5d55bce703bd99987c9d5cb8eea45e
+- name: github.com/fatih/color
+  version: 2d684516a8861da43017284349b7e303e809ac21
 - name: github.com/freddierice/go-losetup
   version: fc9adea44124401d8bfef3a97eaf61b5d44cc2c6
 - name: github.com/gorilla/websocket
   version: 5ed622c449da6d44c3c8329331ff47a9e5844f71
 - name: github.com/klauspost/compress
-  version: a17685a03bf4c0a9219e110eb90e028b36193570
+  version: b50017755d442260d792c34c7c43216d9ba7ffc7
   subpackages:
   - flate
 - name: github.com/klauspost/cpuid
@@ -28,15 +30,19 @@ imports:
 - name: github.com/klauspost/crc32
   version: bab58d77464aa9cf4e84200c3276da0831fe0c03
 - name: github.com/klauspost/pgzip
-  version: 90b2c57fba35a1dd05cb40f9200722763808d99b
+  version: c4ad2ed77aece7b3270909769a30a3fcea262a66
 - name: github.com/lxc/lxd
-  version: 919d9bb458c0596d10df9d50741892aab53015bd
+  version: a7d40026a492d8c42bf00a25ad8b5a2dc77f1c22
   subpackages:
   - shared
   - shared/cancel
   - shared/idmap
   - shared/ioprogress
   - shared/logger
+- name: github.com/mattn/go-colorable
+  version: efa589957cd060542a26d2dd7832fd6a6c6c3ade
+- name: github.com/mattn/go-isatty
+  version: 6ca4dbf54d38eea1a992b3c722a76a5d1c4cb25c
 - name: github.com/mattn/go-runewidth
   version: ce7b0b5c7b45a81508558cd1dba6bb1e4ddb51bb
 - name: github.com/mitchellh/hashstructure
@@ -49,7 +55,7 @@ imports:
   - specs-go
   - specs-go/v1
 - name: github.com/opencontainers/runtime-spec
-  version: 7c4c8f63a63693f75cfa0f3f397151fb8d9732ad
+  version: d810dbc60d8c5aeeb3d054bd1132fab2121968ce
   subpackages:
   - specs-go
 - name: github.com/opencontainers/runtime-tools
@@ -81,13 +87,13 @@ imports:
   subpackages:
   - diffmatchpatch
 - name: github.com/sirupsen/logrus
-  version: c155da19408a8799da419ed3eeb0cb5db0ad5dbc
+  version: 3e01752db0189b9157070a0e1668a620f9a85da2
 - name: github.com/syndtr/gocapability
   version: db04d3cc01c8b54962a58ec7e491717d06cfcc16
   subpackages:
   - capability
 - name: github.com/udhos/equalfile
-  version: c92b0e41854b49e567ba269dcc572ada60e48e7b
+  version: a22d6261a8dfb7c252a17b5fb4f5779f0ce3d408
 - name: github.com/urfave/cli
   version: 8e01ec4cd3e2d84ab2fe90d8210528ffbb06d8ff
 - name: github.com/vbatts/go-mtree
@@ -96,12 +102,12 @@ imports:
   - pkg/govis
   - xattr
 - name: golang.org/x/crypto
-  version: a49355c7e3f8fe157a85be2f77e6e269a0f89602
+  version: 80fca2ff14a3fb7db622c9a5462f8ce9ea026cba
   subpackages:
   - ripemd160
   - ssh/terminal
 - name: golang.org/x/net
-  version: 4cb1c02c05b0e749b0365f61ae859a8e0cfceed9
+  version: f4c29de78a2a91c00474a2e689954305c350adf9
   subpackages:
   - context
 - name: golang.org/x/sys

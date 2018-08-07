@@ -16,6 +16,7 @@ b:
     run: |
         touch /b
         echo "world" > /foo
+        ln -s /foo /link
 both:
     from:
         type: docker
@@ -37,4 +38,30 @@ function teardown() {
     [ -f dest/rootfs/a ]
     [ -f dest/rootfs/b ]
     [ "$(cat dest/rootfs/foo)" == "$(printf "world\nhello\n")" ]
+}
+
+@test "apply ld.so.cache generation" {
+    cat > stacker.yaml <<EOF
+a:
+    from:
+        type: docker
+        url: docker://centos:latest
+    run: |
+        yum -y install openssl-devel
+b:
+    from:
+        type: docker
+        url: docker://centos:latest
+    run: |
+        yum -y install 
+both:
+    from:
+        type: docker
+        url: docker://centos:latest
+    run: cat /foo
+    apply:
+        - oci:oci:a
+        - oci:oci:b
+EOF
+    stacker build
 }
