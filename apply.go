@@ -115,23 +115,43 @@ func (a *Apply) applyImage(layer string) error {
 		return err
 	}
 
-	oci, err := umoci.OpenLayout(path.Join(a.opts.Config.StackerDir, "layer-bases", "oci"))
+	layerBases, err := umoci.OpenLayout(path.Join(a.opts.Config.StackerDir, "layer-bases", "oci"))
 	if err != nil {
 		return err
 	}
-	defer oci.Close()
+	defer layerBases.Close()
 
 	tag, err := tagFromSkopeoUrl(layer)
 	if err != nil {
 		return err
 	}
 
-	manifest, err := oci.LookupManifest(tag)
+	manifest, err := layerBases.LookupManifest(tag)
 	if err != nil {
 		return err
 	}
 
-	for _, l := range manifest.Layers {
+	config, err := layerBases.LookupConfig(manifest.Config)
+	if err != nil {
+		return err
+	}
+
+	baseTag, err := a.opts.Layer.From.ParseTag()
+	if err != nil {
+		return err
+	}
+
+	baseManifest, err := layerBases.LookupManifest(baseTag)
+	if err != nil {
+		return err
+	}
+
+	baseConfig, err := layerBases.LookupConfig(baseManifest.Config)
+	if err != nil {
+		return err
+	}
+
+	for i, l := range manifest.Layers {
 		// did we already extract this layer in this image?
 		found := false
 		for _, l2 := range a.layers {
@@ -151,12 +171,95 @@ func (a *Apply) applyImage(layer string) error {
 		// layer is strictly additive or doesn't otherwise require
 		// merging, we could realize that and add it directly to the
 		// OCI output, so that it is kept as its own layer.
-		err := a.applyLayer(oci, l, path.Join(a.opts.Config.RootFSDir, a.opts.Target))
+		err := a.applyLayer(layerBases, l, path.Join(a.opts.Config.RootFSDir, a.opts.Target))
 		if err != nil {
 			return err
 		}
 
 		a.layers = append(a.layers, l)
+
+		// Let's be slightly intelligent here: we can share exactly the layers,
+		// since either 1. it is identical because we didn't do any merges, or
+		// 2. there is a tiny delta, which we will generate in the final build
+		// step. But in either case, we can insert this layer into the image
+		// and update umoci's metadata, since we have applied it.
+
+		// Insert the blob if it doesn't exist; note that we don't use umoci's
+		// mutator here, because it wants an uncompressed blob, and we don't
+		// want to uncompress the blob just to decompress it again. We could
+		// restructure this so we only have to read the blob once, though.
+		if _, err := a.opts.OCI.LookupBlob(l); err != nil {
+			blob, err := layerBases.LookupBlob(l)
+			if err != nil {
+				return errors.Wrapf(err, "huh? found layer before but not second time")
+			}
+			defer blob.Close()
+
+			reader, needsClose, err := getReader(blob)
+			if err != nil {
+				return err
+			}
+			if needsClose {
+				defer reader.Close()
+			}
+
+			digest, size, err := a.opts.OCI.PutBlob(reader)
+			if err != nil {
+				return errors.Wrapf(err, "error putting apply blob in oci output")
+			}
+
+			if digest != l.Digest || size != l.Size {
+				return errors.Errorf("apply layer mismatch %s %s", digest, size)
+			}
+		}
+
+		baseManifest.Layers = append(baseManifest.Layers, l)
+		baseConfig.RootFS.DiffIDs = append(baseConfig.RootFS.DiffIDs, config.RootFS.DiffIDs[i])
+	}
+
+	// Add the layer to the image.
+	digest, size, err := a.opts.OCI.PutBlobJSON(config)
+	if err != nil {
+		return err
+	}
+
+	manifest.Config = ispec.Descriptor{
+		MediaType: ispec.MediaTypeImageConfig,
+		Digest:    digest,
+		Size:      size,
+	}
+
+	digest, size, err = a.opts.OCI.PutBlobJSON(manifest)
+	if err != nil {
+		return err
+	}
+
+	manifestDesc := ispec.Descriptor{
+		MediaType: ispec.MediaTypeImageManifest,
+		Digest:    digest,
+		Size:      size,
+	}
+	err = a.opts.OCI.UpdateReference(a.opts.Name, manifestDesc)
+	if err != nil {
+		return err
+	}
+
+	// Calculate a new mtree with our current manifest.
+	newMtreeName := strings.Replace(manifestDesc.Digest.String(), ":", "_", 1)
+	err = umoci.GenerateBundleManifest(newMtreeName, path.Join(a.opts.Config.RootFSDir, a.opts.Target), fseval.DefaultFsEval)
+	if err != nil {
+		return err
+	}
+
+	// Update umoci's metadata.
+	umociMeta := umoci.UmociMeta{Version: umoci.UmociMetaVersion, From: casext.DescriptorPath{
+		Walk: []ispec.Descriptor{manifestDesc},
+	}}
+
+	bundlePath := path.Join(a.opts.Config.RootFSDir, a.opts.Target)
+	err = umoci.WriteBundleMeta(bundlePath, umociMeta)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -227,104 +330,6 @@ func (a *Apply) applyLayer(cacheOCI *umoci.Layout, desc ispec.Descriptor, target
 		}
 
 		didMerge = didMerge || merged
-	}
-
-	// Let's be slightly intelligent here: we can share exactly the layer,
-	// since either 1. it is identical because we didn't do any merges, or
-	// 2. there is a tiny delta, which we will generate in the final build
-	// step. But in either case, we can insert this layer into the image
-	// and update umoci's metadata, since we have applied it.
-
-	// Insert the blob if it doesn't exist; note that we don't use umoci's
-	// mutator here, because it wants an uncompressed blob, and we don't
-	// want to uncompress the blob just to decompress it again. We could
-	// restructure this so we only have to read the blob once, though.
-	if _, err := a.opts.OCI.LookupBlob(desc); err != nil {
-		blob.Close()
-		blob, err = cacheOCI.LookupBlob(desc)
-		if err != nil {
-			return errors.Wrapf(err, "huh? found layer before but not second time")
-		}
-		defer blob.Close()
-
-		reader, needsClose, err = getReader(blob)
-		if err != nil {
-			return err
-		}
-		if needsClose {
-			defer reader.Close()
-		}
-
-		digest, size, err := a.opts.OCI.PutBlob(reader)
-		if err != nil {
-			return errors.Wrapf(err, "error putting apply blob in oci output")
-		}
-
-		if digest != desc.Digest || size != desc.Size {
-			return errors.Errorf("apply layer mismatch %s %s", digest, size)
-		}
-	}
-
-	// Add the layer to the image.
-	manifest, err := a.opts.OCI.LookupManifest(a.opts.Name)
-	if err != nil {
-		return err
-	}
-
-	manifest.Layers = append(manifest.Layers, ispec.Descriptor{
-		MediaType: blob.MediaType,
-		Digest:    desc.Digest,
-		Size:      desc.Size,
-	})
-
-	config, err := a.opts.OCI.LookupConfig(manifest.Config)
-	if err != nil {
-		return err
-	}
-
-	config.RootFS.DiffIDs = append(config.RootFS.DiffIDs, diffID.Digest())
-	digest, size, err := a.opts.OCI.PutBlobJSON(config)
-	if err != nil {
-		return err
-	}
-
-	manifest.Config = ispec.Descriptor{
-		MediaType: ispec.MediaTypeImageConfig,
-		Digest:    digest,
-		Size:      size,
-	}
-
-	digest, size, err = a.opts.OCI.PutBlobJSON(manifest)
-	if err != nil {
-		return err
-	}
-
-	manifestDesc := ispec.Descriptor{
-		MediaType: ispec.MediaTypeImageManifest,
-		Digest:    digest,
-		Size:      size,
-	}
-	err = a.opts.OCI.UpdateReference(a.opts.Name, manifestDesc)
-	if err != nil {
-		return err
-	}
-
-	// Calculate a new mtree with our current manifest.
-	newMtreeName := strings.Replace(manifestDesc.Digest.String(), ":", "_", 1)
-	err = umoci.GenerateBundleManifest(newMtreeName, target, fseval.DefaultFsEval)
-	if err != nil {
-		return err
-	}
-
-	// Update umoci's metadata.
-	umociMeta := umoci.UmociMeta{Version: umoci.UmociMetaVersion, From: casext.DescriptorPath{
-		Walk: []ispec.Descriptor{manifestDesc},
-	}}
-
-	bundlePath := path.Join(a.opts.Config.RootFSDir, a.opts.Target)
-	err = umoci.WriteBundleMeta(bundlePath, umociMeta)
-	if err != nil {
-		return err
 	}
 
 	return nil
