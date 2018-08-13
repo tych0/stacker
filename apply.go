@@ -141,14 +141,20 @@ func (a *Apply) applyImage(layer string) error {
 		return err
 	}
 
-	baseManifest, err := layerBases.LookupManifest(baseTag)
+	baseManifest, err := a.opts.OCI.LookupManifest(a.opts.Name)
 	if err != nil {
-		return err
+		baseManifest, err = layerBases.LookupManifest(baseTag)
+		if err != nil {
+			return err
+		}
 	}
 
-	baseConfig, err := layerBases.LookupConfig(baseManifest.Config)
+	baseConfig, err := a.opts.OCI.LookupConfig(baseManifest.Config)
 	if err != nil {
-		return err
+		baseConfig, err = layerBases.LookupConfig(baseManifest.Config)
+		if err != nil {
+			return err
+		}
 	}
 
 	for i, l := range manifest.Layers {
@@ -218,18 +224,18 @@ func (a *Apply) applyImage(layer string) error {
 	}
 
 	// Add the layer to the image.
-	digest, size, err := a.opts.OCI.PutBlobJSON(config)
+	digest, size, err := a.opts.OCI.PutBlobJSON(baseConfig)
 	if err != nil {
 		return err
 	}
 
-	manifest.Config = ispec.Descriptor{
+	baseManifest.Config = ispec.Descriptor{
 		MediaType: ispec.MediaTypeImageConfig,
 		Digest:    digest,
 		Size:      size,
 	}
 
-	digest, size, err = a.opts.OCI.PutBlobJSON(manifest)
+	digest, size, err = a.opts.OCI.PutBlobJSON(baseManifest)
 	if err != nil {
 		return err
 	}
