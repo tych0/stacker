@@ -15,7 +15,7 @@ b:
         url: docker://centos:latest
     run: |
         touch /b
-        echo "world" > /foo
+        echo "hello" > /foo
 both:
     from:
         type: docker
@@ -38,7 +38,7 @@ function teardown() {
 
     [ -f dest/rootfs/a ]
     [ -f dest/rootfs/b ]
-    [ "$(cat dest/rootfs/foo)" == "$(printf "world\nhello\n")" ]
+    [ "$(cat dest/rootfs/foo)" == "$(printf "hello\n")" ]
 }
 
 @test "apply adds layers by hash" {
@@ -70,5 +70,5 @@ function teardown() {
 
     [ -f dest/rootfs/a ]
     [ -f dest/rootfs/b ]
-    [ "$(cat dest/rootfs/foo)" == "$(printf "world\nhello\n")" ]
+    [ "$(cat dest/rootfs/foo)" == "$(printf "hello\n")" ]
 }
