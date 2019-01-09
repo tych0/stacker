@@ -12,15 +12,23 @@ import (
 	"github.com/anuvu/stacker/lib"
 	"github.com/openSUSE/umoci"
 	"github.com/openSUSE/umoci/oci/casext"
+	"github.com/opencontainers/go-digest"
+	ispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/pkg/errors"
+)
+
+const (
+	MediaTypeLayerSquashfs = "application/vnd.oci.image.layer.squashfs"
 )
 
 type BaseLayerOpts struct {
-	Config StackerConfig
-	Name   string
-	Target string
-	Layer  *Layer
-	Cache  *BuildCache
-	OCI    casext.Engine
+	Config    StackerConfig
+	Name      string
+	Target    string
+	Layer     *Layer
+	Cache     *BuildCache
+	OCI       casext.Engine
+	LayerType string
 }
 
 func GetBaseLayer(o BaseLayerOpts, sf *Stackerfile) error {
@@ -90,6 +98,7 @@ func runSkopeo(toImport string, o BaseLayerOpts, copyToOutput bool) error {
 			// don't have a valid OCI layout, which is fine.
 			return
 		}
+		defer oci.Close()
 
 		oci.GC(context.Background())
 	}()
@@ -108,11 +117,93 @@ func runSkopeo(toImport string, o BaseLayerOpts, copyToOutput bool) error {
 		return nil
 	}
 
-	// We just copied it to the cache, now let's copy that over to our image.
-	err = lib.ImageCopy(lib.ImageCopyOpts{
-		Src:  fmt.Sprintf("oci:%s:%s", cacheDir, tag),
-		Dest: fmt.Sprintf("oci:%s:%s", o.Config.OCIDir, tag),
-	})
+	if o.LayerType == "tar" {
+		// We just copied it to the cache, now let's copy that over to our image.
+		err = lib.ImageCopy(lib.ImageCopyOpts{
+			Src:  fmt.Sprintf("oci:%s:%s", cacheDir, tag),
+			Dest: fmt.Sprintf("oci:%s:%s", o.Config.OCIDir, tag),
+		})
+	} else if o.LayerType == "squashfs" {
+		tmpSquashfs, err := mkSquashfs(o.Config, nil)
+		if err != nil {
+			return err
+		}
+
+		layerDigest, layerSize, err := o.OCI.PutBlob(context.Background(), tmpSquashfs)
+		if err != nil {
+			return err
+		}
+
+		cache, err := umoci.OpenLayout(cacheDir)
+		if err != nil {
+			return err
+		}
+		defer cache.Close()
+
+		manifest, err := LookupManifest(cache, o.Name)
+		if err != nil {
+			return err
+		}
+
+		config, err := LookupConfig(cache, manifest.Config)
+		if err != nil {
+			return err
+		}
+
+		desc := ispec.Descriptor{
+			MediaType: MediaTypeLayerSquashfs,
+			Digest:    layerDigest,
+			Size:      layerSize,
+		}
+
+		manifest.Layers = []ispec.Descriptor{desc}
+		config.RootFS.DiffIDs = []digest.Digest{layerDigest}
+
+		configDigest, configSize, err := o.OCI.PutBlobJSON(context.Background(), config)
+		if err != nil {
+			return err
+		}
+
+		manifest.Config = ispec.Descriptor{
+			MediaType: ispec.MediaTypeImageConfig,
+			Digest:    configDigest,
+			Size:      configSize,
+		}
+
+		manifestDigest, manifestSize, err := o.OCI.PutBlobJSON(context.Background(), manifest)
+		if err != nil {
+			return err
+		}
+
+		desc = ispec.Descriptor{
+			MediaType: ispec.MediaTypeImageManifest,
+			Digest:    manifestDigest,
+			Size:      manifestSize,
+		}
+
+		err = o.OCI.UpdateReference(context.Background(), o.Name, desc)
+		if err != nil {
+			return err
+		}
+
+		bundlePath := path.Join(o.Config.RootFSDir, ".working")
+		err = updateBundleMtree(bundlePath, desc)
+		if err != nil {
+			return err
+		}
+
+		err = umoci.WriteBundleMeta(bundlePath, umoci.Meta{
+			Version: umoci.MetaVersion,
+			From: casext.DescriptorPath{
+				Walk: []ispec.Descriptor{desc},
+			},
+		})
+		if err != nil {
+			return err
+		}
+	} else {
+		err = errors.Errorf("unknown layer type %s", o.LayerType)
+	}
 	return err
 }
 
