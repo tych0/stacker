@@ -73,6 +73,10 @@ func mkSquashfs(config StackerConfig, toExclude []string) (*os.File, error) {
 
 	// generate the squashfs in OCIDir, and then open it, read it from
 	// there, and delete it.
+	if err := os.MkdirAll(config.OCIDir, 0755); err != nil {
+		return nil, err
+	}
+
 	tmpSquashfs, err := ioutil.TempFile(config.OCIDir, "stacker-squashfs-img-")
 	if err != nil {
 		return nil, err
@@ -89,7 +93,7 @@ func mkSquashfs(config StackerConfig, toExclude []string) (*os.File, error) {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err = cmd.Run(); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "couldn't build squashfs")
 	}
 
 	return os.Open(tmpSquashfs.Name())

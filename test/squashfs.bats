@@ -22,8 +22,8 @@ function teardown() {
     stacker build --layer-type=squashfs
 
     manifest=$(cat oci/index.json | jq -r .manifests[0].digest | cut -f2 -d:)
-    layer0=$(cat oci/blobs/sha256/$manifest | jq -r .layers[0].digest)
-    layer1=$(cat oci/blobs/sha256/$manifest | jq -r .layers[1].digest)
+    layer0=$(cat oci/blobs/sha256/$manifest | jq -r .layers[0].digest | cut -f2 -d:)
+    layer1=$(cat oci/blobs/sha256/$manifest | jq -r .layers[1].digest | cut -f2 -d:)
 
     mkdir layer0
     mount -t squashfs oci/blobs/sha256/$layer0 layer0

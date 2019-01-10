@@ -117,13 +117,44 @@ func runSkopeo(toImport string, o BaseLayerOpts, copyToOutput bool) error {
 		return nil
 	}
 
+	// If the layer type is something besides tar, we'll generate the
+	// base layer after it's extracted from the input image.
 	if o.LayerType == "tar" {
 		// We just copied it to the cache, now let's copy that over to our image.
 		err = lib.ImageCopy(lib.ImageCopyOpts{
 			Src:  fmt.Sprintf("oci:%s:%s", cacheDir, tag),
 			Dest: fmt.Sprintf("oci:%s:%s", o.Config.OCIDir, tag),
 		})
-	} else if o.LayerType == "squashfs" {
+	}
+
+	return err
+}
+
+func extractOutput(o BaseLayerOpts) error {
+	tag, err := o.Layer.From.ParseTag()
+	if err != nil {
+		return err
+	}
+
+	target := path.Join(o.Config.RootFSDir, o.Target)
+	fmt.Println("unpacking to", target)
+
+	image := fmt.Sprintf("%s:%s", path.Join(o.Config.StackerDir, "layer-bases", "oci"), tag)
+	args := []string{"umoci", "unpack", "--image", image, target}
+	err = MaybeRunInUserns(args, "image unpack failed")
+	if err != nil {
+		return err
+	}
+
+	// Delete the tag for the base layer; we're only interested in our
+	// build layer outputs, not in the base layers.
+	o.OCI.DeleteReference(context.Background(), tag)
+
+	// Now, if the layer type is something besides tar, we need to
+	// generate the base layer as whatever type that is.
+	if o.LayerType == "squashfs" {
+		o.OCI.GC(context.Background())
+
 		tmpSquashfs, err := mkSquashfs(o.Config, nil)
 		if err != nil {
 			return err
@@ -134,9 +165,10 @@ func runSkopeo(toImport string, o BaseLayerOpts, copyToOutput bool) error {
 			return err
 		}
 
+		cacheDir := path.Join(o.Config.StackerDir, "layer-bases", "oci")
 		cache, err := umoci.OpenLayout(cacheDir)
 		if err != nil {
-			return err
+			return errors.Wrapf(err, "couldn't open base layer dir")
 		}
 		defer cache.Close()
 
@@ -201,33 +233,6 @@ func runSkopeo(toImport string, o BaseLayerOpts, copyToOutput bool) error {
 		if err != nil {
 			return err
 		}
-	} else {
-		err = errors.Errorf("unknown layer type %s", o.LayerType)
-	}
-	return err
-}
-
-func extractOutput(o BaseLayerOpts) error {
-	tag, err := o.Layer.From.ParseTag()
-	if err != nil {
-		return err
-	}
-
-	target := path.Join(o.Config.RootFSDir, o.Target)
-	fmt.Println("unpacking to", target)
-
-	image := fmt.Sprintf("%s:%s", path.Join(o.Config.StackerDir, "layer-bases", "oci"), tag)
-	args := []string{"umoci", "unpack", "--image", image, target}
-	err = MaybeRunInUserns(args, "image unpack failed")
-	if err != nil {
-		return err
-	}
-
-	// Delete the tag for the base layer; we're only interested in our
-	// build layer outputs, not in the base layers.
-	err = o.OCI.DeleteReference(context.Background(), tag)
-	if err != nil {
-		return err
 	}
 
 	return nil
