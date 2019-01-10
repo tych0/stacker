@@ -165,46 +165,67 @@ func generateSquashfsLayer(oci casext.Engine, name string, author string, opts *
 	}
 	defer tmpSquashfs.Close()
 
-	descPaths, err := oci.ResolveReference(context.Background(), name)
+	manifest, err := LookupManifest(oci, name)
 	if err != nil {
 		return err
 	}
 
-	mutator, err := mutate.New(oci, descPaths[0])
-	if err != nil {
-		return errors.Wrapf(err, "mutator failed")
-	}
-
-	now := time.Now()
-	history := ispec.History{
-		Created:   &now,
-		CreatedBy: "stacker build",
-		Author:    author,
-	}
-
-	err = mutator.Add(context.Background(), tmpSquashfs, &history)
+	config, err := LookupConfig(oci, manifest.Config)
 	if err != nil {
 		return err
 	}
 
-	newDscPath, err := mutator.Commit(context.Background())
+	blobDigest, blobSize, err := oci.PutBlob(context.Background(), tmpSquashfs)
 	if err != nil {
 		return err
 	}
 
-	err = oci.UpdateReference(context.Background(), name, newDscPath.Root())
+	desc := ispec.Descriptor{
+		MediaType: MediaTypeLayerSquashfs,
+		Digest:    blobDigest,
+		Size:      blobSize,
+	}
+
+	manifest.Layers = append(manifest.Layers, desc)
+	config.RootFS.DiffIDs = append(config.RootFS.DiffIDs, blobDigest)
+
+	configDigest, configSize, err := oci.PutBlobJSON(context.Background(), config)
 	if err != nil {
 		return err
 	}
 
-	newName := strings.Replace(newDscPath.Root().Digest.String(), ":", "_", 1) + ".mtree"
+	manifest.Config = ispec.Descriptor{
+		MediaType: ispec.MediaTypeImageConfig,
+		Digest:    configDigest,
+		Size:      configSize,
+	}
+
+	manifestDigest, manifestSize, err := oci.PutBlobJSON(context.Background(), manifest)
+	if err != nil {
+		return err
+	}
+
+	desc = ispec.Descriptor{
+		MediaType: ispec.MediaTypeImageManifest,
+		Digest:    manifestDigest,
+		Size:      manifestSize,
+	}
+
+	err = oci.UpdateReference(context.Background(), name, desc)
+	if err != nil {
+		return err
+	}
+
+	newName := strings.Replace(desc.Digest.String(), ":", "_", 1) + ".mtree"
 	err = umoci.GenerateBundleManifest(newName, path.Join(opts.Config.RootFSDir, ".working"), fsEval)
 	if err != nil {
 		return err
 	}
 
 	os.Remove(mtreePath)
-	meta.From = newDscPath
+	meta.From = casext.DescriptorPath{
+		Walk: []ispec.Descriptor{desc},
+	}
 	err = umoci.WriteBundleMeta(path.Join(opts.Config.RootFSDir, ".working"), meta)
 	if err != nil {
 		return err
