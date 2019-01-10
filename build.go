@@ -54,7 +54,7 @@ func updateBundleMtree(rootPath string, newPath ispec.Descriptor) error {
 }
 
 func mkSquashfs(config StackerConfig, toExclude []string) (*os.File, error) {
-	var excludes *os.File
+	var excludesFile string
 	var err error
 
 	if len(toExclude) != 0 {
@@ -64,11 +64,13 @@ func mkSquashfs(config StackerConfig, toExclude []string) (*os.File, error) {
 		}
 		defer os.Remove(excludes.Name())
 
-		_, err = excludes.WriteString(strings.Join(toExclude, "\n"))
+		excludesFile = excludes.Name()
+		_, err = excludes.WriteString(strings.Join(toExclude, "\n") + "\n")
 		excludes.Close()
 		if err != nil {
 			return nil, err
 		}
+
 	}
 
 	// generate the squashfs in OCIDir, and then open it, read it from
@@ -87,7 +89,7 @@ func mkSquashfs(config StackerConfig, toExclude []string) (*os.File, error) {
 	rootfsPath := path.Join(config.RootFSDir, ".working", "rootfs")
 	args := []string{rootfsPath, tmpSquashfs.Name()}
 	if len(toExclude) != 0 {
-		args = append(args, "-ef", excludes.Name())
+		args = append(args, "-ef", excludesFile)
 	}
 	cmd := exec.Command("mksquashfs", args...)
 	cmd.Stdout = os.Stdout
@@ -120,7 +122,12 @@ func generateSquashfsLayer(oci casext.Engine, name string, author string, opts *
 
 	fsEval := fseval.DefaultFsEval
 	rootfsPath := path.Join(opts.Config.RootFSDir, ".working", "rootfs")
-	diffs, err := mtree.Check(rootfsPath, spec, umoci.MtreeKeywords, fsEval)
+	newDH, err := mtree.Walk(rootfsPath, nil, umoci.MtreeKeywords, fsEval)
+	if err != nil {
+		return errors.Wrapf(err, "couldn't mtree walk %s", rootfsPath)
+	}
+
+	diffs, err := mtree.CompareSame(spec, newDH, umoci.MtreeKeywords)
 	if err != nil {
 		return err
 	}
