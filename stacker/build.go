@@ -46,6 +46,9 @@ var buildCmd = cli.Command{
 			Usage: "set the output layer type (supported values: tar, squashfs)",
 			Value: "tar",
 		},
+		cli.Uint64Flag{
+			Name: "max-layer-size",
+		},
 	},
 	Before: beforeBuild,
 }
@@ -85,6 +88,7 @@ func doBuild(ctx *cli.Context) error {
 		OnRunFailure:            ctx.String("on-run-failure"),
 		ApplyConsiderTimestamps: ctx.Bool("apply-consider-timestamps"),
 		LayerType:               ctx.String("layer-type"),
+		MaxLayerSize:            ctx.Uint64("max-layer-size"),
 	}
 
 	return stacker.Build(&args)
