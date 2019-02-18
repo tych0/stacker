@@ -143,7 +143,7 @@ func importFile(imp string, cacheDir string) (string, error) {
 					return "", err
 				}
 
-				sdirinfo, err := os.Stat(path.Dir(srcpath))
+				sdirinfo, err := os.Lstat(path.Dir(srcpath))
 				if err != nil {
 					return "", err
 				}
