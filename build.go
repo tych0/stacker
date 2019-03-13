@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/openSUSE/umoci"
@@ -58,6 +59,13 @@ func mkSquashfs(config StackerConfig, toExclude []string) (*os.File, error) {
 	var err error
 
 	if len(toExclude) != 0 {
+		logExcludes, err := os.Create("/tmp/excludes")
+		if err != nil {
+			return nil, err
+		}
+		defer logExcludes.Close()
+		logExcludes.WriteString(strings.Join(toExclude, "\n") + "\n")
+
 		excludes, err := ioutil.TempFile("", "stacker-squashfs-exclude-")
 		if err != nil {
 			return nil, err
@@ -151,15 +159,25 @@ func generateSquashfsLayer(oci casext.Engine, name string, author string, opts *
 	}()
 
 	same := []string{}
-	for _, diff := range diffs {
+	for i, diff := range diffs {
+		if i == 0 {
+			fmt.Printf("first diff: %v\n", diff)
+		}
+		if diff.Path() == "etc/selinux" {
+			fmt.Println("selinux diff: ", diff.Type())
+		}
 		switch diff.Type() {
 		case mtree.Modified, mtree.Extra:
 			break
 		case mtree.Missing:
 			p := path.Join(rootfsPath, diff.Path())
 			missing = append(missing, p)
-			if err := unix.Mknod(p, 0, 0); err != nil {
-				return err
+			if diff.Path() == "etc/selinux" {
+				_, err := os.Stat(p)
+				fmt.Println("stat err: ", err)
+			}
+			if err := unix.Mknod(p, 0, 0); err != nil && err != syscall.ENOTDIR && !os.IsNotExist(err) {
+				return errors.Wrapf(err, "couldn't mknod whiteout for %s", diff.Path())
 			}
 		case mtree.Same:
 			same = append(same, path.Join(rootfsPath, diff.Path()))
