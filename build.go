@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/openSUSE/umoci"
@@ -159,24 +158,15 @@ func generateSquashfsLayer(oci casext.Engine, name string, author string, opts *
 	}()
 
 	same := []string{}
-	for i, diff := range diffs {
-		if i == 0 {
-			fmt.Printf("first diff: %v\n", diff)
-		}
-		if diff.Path() == "etc/selinux" {
-			fmt.Println("selinux diff: ", diff.Type())
-		}
+	for _, diff := range diffs {
 		switch diff.Type() {
 		case mtree.Modified, mtree.Extra:
 			break
 		case mtree.Missing:
+			fmt.Println("missing: ", diff.Path())
 			p := path.Join(rootfsPath, diff.Path())
 			missing = append(missing, p)
-			if diff.Path() == "etc/selinux" {
-				_, err := os.Stat(p)
-				fmt.Println("stat err: ", err)
-			}
-			if err := unix.Mknod(p, 0, 0); err != nil && err != syscall.ENOTDIR && !os.IsNotExist(err) {
+			if err := unix.Mknod(p, unix.S_IFCHR, int(unix.Mkdev(0, 0))); err != nil && !os.IsNotExist(err) && err != unix.ENOTDIR {
 				return errors.Wrapf(err, "couldn't mknod whiteout for %s", diff.Path())
 			}
 		case mtree.Same:

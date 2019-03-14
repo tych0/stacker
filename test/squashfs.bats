@@ -41,10 +41,8 @@ centos:
         type: docker
         url: docker://centos:latest
     run: |
-        [ -d /etc/selinux ]
-        [ -f /bin/ls ]
         rm -rf /etc/selinux
-        rm -f /bin/ls
+        rm -f /usr/bin/ls
 EOF
 
     stacker build --layer-type=squashfs
@@ -61,10 +59,9 @@ EOF
     mount -t squashfs oci/blobs/sha256/$layer1 layer1
 
     mkdir combined
-    mount -t overlay -o "lowerdir=layer0:layer1" overlay combined
+    mount -t overlay -o "lowerdir=layer1:layer0" overlay combined
 
     # make sure directory and file whiteouts work
     [ ! -d combined/etc/selinux ]
-    [ ! -f combined/bin/ls ]
-
+    [ ! -f combined/usr/bin/ls ]
 }
