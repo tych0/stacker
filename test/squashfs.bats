@@ -57,6 +57,7 @@ EOF
 
     mkdir layer1
     mount -t squashfs oci/blobs/sha256/$layer1 layer1
+    tree layer1
 
     mkdir combined
     mount -t overlay -o "lowerdir=layer1:layer0" overlay combined

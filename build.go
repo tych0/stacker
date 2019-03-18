@@ -98,6 +98,7 @@ func mkSquashfs(config StackerConfig, toExclude []string) (*os.File, error) {
 	if len(toExclude) != 0 {
 		args = append(args, "-ef", excludesFile)
 	}
+	args = append(args, "-info")
 	cmd := exec.Command("mksquashfs", args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -158,7 +159,10 @@ func generateSquashfsLayer(oci casext.Engine, name string, author string, opts *
 	}()
 
 	same := []string{}
+	mtreeLog, _ := os.Create("/tmp/mtreedata")
+	defer mtreeLog.Close()
 	for _, diff := range diffs {
+		mtreeLog.WriteString(fmt.Sprintf("%s - %s\n", diff.Type(), diff.Path()))
 		switch diff.Type() {
 		case mtree.Modified, mtree.Extra:
 			break
@@ -166,8 +170,11 @@ func generateSquashfsLayer(oci casext.Engine, name string, author string, opts *
 			fmt.Println("missing: ", diff.Path())
 			p := path.Join(rootfsPath, diff.Path())
 			missing = append(missing, p)
-			if err := unix.Mknod(p, unix.S_IFCHR, int(unix.Mkdev(0, 0))); err != nil && !os.IsNotExist(err) && err != unix.ENOTDIR {
-				return errors.Wrapf(err, "couldn't mknod whiteout for %s", diff.Path())
+			if err := unix.Mknod(p, unix.S_IFCHR, int(unix.Mkdev(0, 0))); err != nil {
+				if !os.IsNotExist(err) && err != unix.ENOTDIR {
+					return errors.Wrapf(err, "couldn't mknod whiteout for %s", diff.Path())
+				}
+				fmt.Println("error mknoding", err)
 			}
 		case mtree.Same:
 			same = append(same, path.Join(rootfsPath, diff.Path()))
