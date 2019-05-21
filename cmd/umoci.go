@@ -80,6 +80,93 @@ func doInit(ctx *cli.Context) error {
 	return nil
 }
 
+func prepareUmociMetadata(bundlePath string) error {
+	// We need the mtree metadata to be present, but since these
+	// intermediate snapshots were created after each layer was
+	// extracted and the metadata wasn't, it won't necessarily
+	// exist. We could create it at extract time, but that would
+	// make everything really slow, since we'd have to walk the
+	// whole FS after every layer which would probably slow things
+	// way down.
+	//
+	// Instead, check to see if the metadata has been generated. If
+	// it hasn't, we generate it, and then re-snapshot back (since
+	// we can't write to the old snapshots) with the metadata.
+	//
+	// This means the first restore will be slower, but after that
+	// it will be very fast.
+	//
+	// Further complicating things are build only layers. They
+	// don't necessarily get their output copied to the resulting
+	// image, but they do get extracted, and we may be currently
+	// referencing a manifest that doesn't exist in the output. So,
+	// we don't want to save umoci's metadata referencing that
+	// manifest. However, because this could be top level build
+	// only layer, umoci might have done that itself. So what we do
+	// is copy any mtree file (i.e. one from the old manifest) to
+	// our new manifest's hash location, write the metadata as
+	// umoci wants it, and then do the unpack.
+	//
+	// In the case described above, where this was an intermediate
+	// layer, we just name the file stacker.mtree, so that it's
+	// always available and we only ever calculate it once.
+	//
+	// A final complication is that we may have deleted the manifest from
+	// the target output because, e.g. someone manually removed it from the
+	// OCI dir, or it was cleaned by a GC because something was re-built
+	// and this is an older reference to the same layers, etc. However, the
+	// core insight here is that we already know the layer hashes match:
+	// this snapshot wouldn't exist if they didn't. So, we just fake the
+	// layer metadata and call it a day.
+	mtreeName := strings.Replace(dps[0].Descriptor().Digest.String(), ":", "_", 1)
+
+	_, err := os.Stat(path.Join(bundlePath, "umoci.json"))
+	if err == nil {
+		_, err := os.Stat(path.Join(bundlePath, mtreeName+".mtree"))
+		if err == nil {
+			// The best case: this layer's mtree and metadata match
+			// what we're currently trying to extract. Do nothing.
+			return nil
+		}
+
+		// The mtree file didn't match. Find the other mtree (it must
+		// exist) in this directory (since any are necessarily correct
+		// per above) and move it to this mtree name, then regenerate
+		// umoci's metadata.
+	} else {
+		// Umoci's metadata wasn't present. If we have an mtree file,
+		// let's just use that.
+		// os.Readdir() for *.mtree and rename it to mtreeName.mtree
+		// else GenerateBundleManifest()
+		fmt.Println("generating mtree metadata for snapshot (this may take a bit)...")
+		err = umoci.GenerateBundleManifest(mtreeName, bundlePath, fseval.DefaultFsEval)
+		if err != nil {
+			return err
+		}
+	}
+
+	meta := umoci.Meta{
+		Version:    umoci.MetaVersion,
+		MapOptions: layer.MapOptions{},
+		From:       dps[0],
+	}
+
+	err = umoci.WriteBundleMeta(bundlePath, meta)
+	if err != nil {
+		return err
+	}
+
+	err = storage.Delete(highestHash)
+	if err != nil {
+		return err
+	}
+
+	err = storage.Snapshot(stacker.WorkingContainerName, highestHash)
+	if err != nil {
+		return err
+	}
+}
+
 func doUnpack(ctx *cli.Context) error {
 	oci, err := umoci.OpenLayout(config.OCIDir)
 	if err != nil {
@@ -121,9 +208,6 @@ func doUnpack(ctx *cli.Context) error {
 		return err
 	}
 
-	// generate the metadata
-	mtreeName := strings.Replace(dps[0].Descriptor().Digest.String(), ":", "_", 1)
-
 	if highestHash != "" {
 		// Delete the previously created working snapshot; we're about
 		// to create a new one.
@@ -141,53 +225,9 @@ func doUnpack(ctx *cli.Context) error {
 			return err
 		}
 
-		// We need the mtree metadata to be present, but since these
-		// intermediate snapshots were created after each layer was
-		// extracted and the metadata wasn't, it won't necessarily
-		// exist. We could create it at extract time, but that would
-		// make everything really slow, since we'd have to walk the
-		// whole FS after every layer which would probably slow things
-		// way down.
-		//
-		// Instead, check to see if the metadata has been generated. If
-		// it hasn't, we generate it, and then re-snapshot back (since
-		// we can't write to the old snapshots) with the metadata.
-		//
-		// This means the first restore will be slower, but after that
-		// it will be very fast.
-		_, err := os.Stat(path.Join(bundlePath, "umoci.json"))
+		err = prepareUmociMetadata(bundlePath)
 		if err != nil {
-			fmt.Println("generating mtree metadata for snapshot (this may take a bit)...")
-			meta := umoci.Meta{
-				Version:    umoci.MetaVersion,
-				MapOptions: layer.MapOptions{},
-				From:       dps[0],
-			}
-
-			// apply: may have generated an mtree file at some
-			// point, and since GenerateBundleManifest() fails if
-			// this file already exists, let's just try to remove
-			// it. see a corresponding comment in apply.go
-			os.RemoveAll(path.Join(bundlePath, mtreeName+".mtree"))
-			err = umoci.GenerateBundleManifest(mtreeName, bundlePath, fseval.DefaultFsEval)
-			if err != nil {
-				return err
-			}
-
-			err = umoci.WriteBundleMeta(bundlePath, meta)
-			if err != nil {
-				return err
-			}
-
-			err = storage.Delete(highestHash)
-			if err != nil {
-				return err
-			}
-
-			err = storage.Snapshot(stacker.WorkingContainerName, highestHash)
-			if err != nil {
-				return err
-			}
+			return err
 		}
 	}
 
