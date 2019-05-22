@@ -63,3 +63,33 @@ EOF
     stacker build --leave-unladen
     [ -f roots/test/rootfs/surgery ]
 }
+
+@test "build only intermediate snapshots don't confuse things" {
+    cat > stacker.yaml <<EOF
+# extract the layers
+first:
+    from:
+        type: docker
+        url: docker://ubuntu:latest
+    run: |
+        echo first
+    build_only: true
+# generate mtree md for them
+second:
+    from:
+        type: docker
+        url: docker://ubuntu:latest
+    run: |
+        echo second
+    build_only: true
+# now try and use that md
+third:
+    from:
+        type: docker
+        url: docker://ubuntu:latest
+    run: |
+        echo third
+EOF
+
+    stacker build
+}
