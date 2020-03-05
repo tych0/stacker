@@ -65,7 +65,7 @@ my-build:
     build_only: true
     from:
         type: docker
-        url: docker://busybox:latest
+        url: docker://centos:latest
     run: |
         #!/bin/sh
         set -e
