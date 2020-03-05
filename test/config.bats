@@ -69,6 +69,7 @@ my-build:
     run: |
         #!/bin/sh
         set -e
+        set -x
         outd=/my-publish
         rm -Rf "$outd"
         mkdir -p "$outd"
