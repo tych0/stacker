@@ -14,6 +14,7 @@ test:
         type: docker
         url: docker://centos:latest
     run: |
+        cat /proc/mounts
         # make sure that /stacker is readonly
         grep "/stacker" /proc/mounts | grep -P "\sro[\s,]"
 
