@@ -117,14 +117,21 @@ func GenerateSquashfsLayer(name, author, bundlepath, ocidir string, oci casext.E
 		}
 	}()
 
+	// we only need to generate a layer if anything was added, modified, or
+	// deleted; if everything is the same this should be a no-op.
+	needsLayer := false
 	paths := squashfs.NewExcludePaths()
 	for _, diff := range diffs {
 		switch diff.Type() {
 		case mtree.Modified, mtree.Extra:
+			needsLayer = true
 			p := path.Join(rootfsPath, diff.Path())
 			paths.AddInclude(p, diff.New().IsDir())
+			fmt.Println("changed/new", p, diff.String())
 		case mtree.Missing:
+			needsLayer = true
 			p := path.Join(rootfsPath, diff.Path())
+			fmt.Println("deleted", p)
 			missing = append(missing, p)
 			paths.AddInclude(p, diff.Old().IsDir())
 			if err := unix.Mknod(p, unix.S_IFCHR, int(unix.Mkdev(0, 0))); err != nil {
@@ -143,6 +150,10 @@ func GenerateSquashfsLayer(name, author, bundlepath, ocidir string, oci casext.E
 		case mtree.Same:
 			paths.AddExclude(path.Join(rootfsPath, diff.Path()))
 		}
+	}
+
+	if !needsLayer {
+		return nil
 	}
 
 	tmpSquashfs, err := mkSquashfs(bundlepath, ocidir, paths)
