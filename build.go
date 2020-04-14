@@ -450,6 +450,82 @@ func (b *Builder) Build(file string) error {
 			continue
 		}
 
+		descPaths, err := oci.ResolveReference(context.Background(), name)
+		if err != nil {
+			return err
+		}
+
+		mutator, err := mutate.New(oci, descPaths[0])
+		if err != nil {
+			return errors.Wrapf(err, "mutator failed")
+		}
+
+		imageConfig, err := mutator.Config(context.Background())
+		if err != nil {
+			return err
+		}
+
+		if imageConfig.Labels == nil {
+			imageConfig.Labels = map[string]string{}
+		}
+
+		generateLabels, err := l.ParseGenerateLabels()
+		if err != nil {
+			return err
+		}
+
+		if len(generateLabels) > 0 {
+			name, cleanup, err := s.TemporaryWritableSnapshot(WorkingContainerName)
+			if err != nil {
+				return err
+			}
+			defer cleanup()
+
+			dir, err := ioutil.TempDir(opts.Config.StackerDir, fmt.Sprintf("oci-labels-%s-", name))
+			if err != nil {
+				return errors.Wrapf(err, "failed to create oci-labels tempdir")
+			}
+
+			c, err = NewContainer(opts.Config, name)
+			if err != nil {
+				return err
+			}
+			defer c.Close()
+
+			err = c.bindMount(dir, "/oci-layers", "")
+			if err != nil {
+				return err
+			}
+
+			err = GenerateShellForRunning(path.Join(name, "rootfs"), generateLabels, path.Join(dir, ".stacker-run.sh"))
+			if err != nil {
+				return err
+			}
+
+			err = c.Execute("/oci-labels/.stacker-run.sh", nil)
+			if err != nil {
+				return err
+			}
+
+			ents, err := ioutil.ReadDir(dir)
+			if err != nil {
+				return errors.Wrapf(err, "failed to read %s", dir)
+			}
+
+			for _, ent := range ents {
+				if ent.Name() == ".stacker-run.sh" {
+					continue
+				}
+
+				content, err := ioutil.ReadFile(path.Join(dir, ent.Name()))
+				if err != nil {
+					return errors.Wrapf(err, "couldn't read label %s", ent.Name())
+				}
+
+				imageConfig.Labels[ent.Name()] = string(content)
+			}
+		}
+
 		fmt.Println("generating layer for", name)
 		switch opts.LayerType {
 		case "tar":
@@ -471,20 +547,6 @@ func (b *Builder) Build(file string) error {
 			}
 		default:
 			return fmt.Errorf("unknown layer type: %s", opts.LayerType)
-		}
-		descPaths, err := oci.ResolveReference(context.Background(), name)
-		if err != nil {
-			return err
-		}
-
-		mutator, err := mutate.New(oci, descPaths[0])
-		if err != nil {
-			return errors.Wrapf(err, "mutator failed")
-		}
-
-		imageConfig, err := mutator.Config(context.Background())
-		if err != nil {
-			return err
 		}
 
 		pathSet := false
@@ -537,10 +599,6 @@ func (b *Builder) Build(file string) error {
 
 		for _, v := range l.Volumes {
 			imageConfig.Volumes[v] = struct{}{}
-		}
-
-		if imageConfig.Labels == nil {
-			imageConfig.Labels = map[string]string{}
 		}
 
 		for k, v := range l.Labels {
