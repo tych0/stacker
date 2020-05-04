@@ -9,7 +9,9 @@ import (
 	"path/filepath"
 
 	"github.com/anuvu/stacker"
+	stackerlog "github.com/anuvu/stacker/log"
 	"github.com/apex/log"
+	clihandler "github.com/apex/log/handlers/cli"
 	"github.com/urfave/cli"
 	"gopkg.in/yaml.v2"
 )
@@ -116,6 +118,10 @@ func main() {
 		debug = ctx.Bool("debug")
 		return nil
 	}
+
+	stackerlog.FilterNonStackerLogs(clihandler.New(os.Stderr))
+	stackerlog.Errorf("hello world from stacker log")
+	log.Errorf("oh no, i'm a normal log")
 
 	log.SetLevel(log.WarnLevel)
 
