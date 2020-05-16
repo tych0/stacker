@@ -293,6 +293,10 @@ func btrfsSubVolumeDelete(subvol string) error {
 }
 
 func (b *btrfs) Delete(source string) error {
+	if err := b.sync(source); err != nil {
+		return err
+	}
+
 	return btrfsSubVolumesDelete(path.Join(b.c.RootFSDir, source))
 }
 
