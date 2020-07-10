@@ -20,6 +20,8 @@ import (
 	"github.com/anuvu/stacker/mount"
 	"github.com/anuvu/stacker/types"
 	"github.com/freddierice/go-losetup"
+	"github.com/opencontainers/umoci"
+	"github.com/opencontainers/umoci/oci/casext"
 	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 )
@@ -158,6 +160,29 @@ func (b *btrfs) Restore(source string, target string) error {
 	}
 
 	return nil
+}
+
+func (b *btrfs) UpdateFSMetadata(name string, newPath casext.DescriptorPath) error {
+	rootPath := path.Join(b.c.RootFSDir, name)
+	newName := strings.Replace(newPath.Descriptor().Digest.String(), ":", "_", 1) + ".mtree"
+
+	infos, err := ioutil.ReadDir(rootPath)
+	if err != nil {
+		return err
+	}
+
+	for _, fi := range infos {
+		if !strings.HasSuffix(fi.Name(), ".mtree") {
+			continue
+		}
+
+		return os.Rename(path.Join(rootPath, fi.Name()), path.Join(rootPath, newName))
+	}
+
+	return umoci.WriteBundleMeta(rootPath, umoci.Meta{
+		Version: umoci.MetaVersion,
+		From:    newPath,
+	})
 }
 
 func (b *btrfs) Finalize(thing string) error {
