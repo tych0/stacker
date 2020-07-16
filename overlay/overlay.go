@@ -3,7 +3,6 @@
 //
 // Things still TODO:
 //
-// 3. support squashfs
 // 4. implement GC (nobody really uses this, it seems people just clean and
 //    rebuild, so...)
 package overlay

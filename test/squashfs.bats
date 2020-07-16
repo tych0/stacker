@@ -31,7 +31,6 @@ EOF
 }
 
 @test "squashfs yum install" {
-    require_storage btrfs # FIXME: overlay
     cat > stacker.yaml <<EOF
 centos1:
     from:
@@ -55,7 +54,6 @@ EOF
 }
 
 @test "squashfs import support" {
-    require_storage btrfs # FIXME: overlay
     cat > stacker.yaml <<EOF
 centos1:
     from:
@@ -79,7 +77,6 @@ EOF
 }
 
 @test "squashfs layer support" {
-    require_storage btrfs # FIXME: overlay
     cat > stacker.yaml <<EOF
 centos:
     from:
@@ -108,7 +105,6 @@ EOF
 }
 
 @test "squashfs file whiteouts" {
-    require_storage btrfs # FIXME: overlay
     cat > stacker.yaml <<EOF
 centos:
     from:

@@ -2,6 +2,7 @@ package overlay
 
 import (
 	"context"
+	"io"
 	"io/ioutil"
 	"os"
 	"path"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/anuvu/stacker/container"
 	stackeroci "github.com/anuvu/stacker/oci"
+	"github.com/anuvu/stacker/squashfs"
 	"github.com/anuvu/stacker/types"
 	"github.com/opencontainers/go-digest"
 	ispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -55,10 +57,17 @@ func (o *overlay) Unpack(ociDir, tag, name string) error {
 			// TODO: we can do something smart here, we don't even
 			// need to unpack the layer, we can just mount it from
 			// the import cache; but we'll need unpriv mount of
-			// squashfs if we want to take advantage of that in our
-			// builds. So maybe we should try to mount and extract
-			// it if we can't? Anyway, punt for now.
-			return errors.Errorf("squashfs + overlay not implemented")
+			// squashfs. so for now let's just extract it as usual
+			pool.Add(func(ctx context.Context) error {
+				return container.RunUmociSubcommand(o.config, []string{
+					"--tag", tag,
+					"--oci-path", ociDir,
+					"--bundle-path", contents,
+					"unpack-one",
+					"--digest", layer.Digest.String(),
+					"--squashfs",
+				})
+			})
 		case ispec.MediaTypeImageLayer:
 			fallthrough
 		case ispec.MediaTypeImageLayerGzip:
@@ -118,10 +127,11 @@ func (o *overlay) Repack(ociDir, name, layerType string) error {
 		"--tag", name,
 		"--oci-path", ociDir,
 		"repack-overlay",
+		"--layer-type", layerType,
 	})
 }
 
-func generateLayer(config types.StackerConfig, mutator *mutate.Mutator, name string) (bool, error) {
+func generateLayer(config types.StackerConfig, mutator *mutate.Mutator, name string, layerType string) (bool, error) {
 	dir := path.Join(config.RootFSDir, name, "overlay")
 	ents, err := ioutil.ReadDir(dir)
 	if err != nil {
@@ -135,7 +145,20 @@ func generateLayer(config types.StackerConfig, mutator *mutate.Mutator, name str
 	// a hack, but GenerateInsertLayer() is the only thing that just takes
 	// everything in a dir and makes it a layer.
 	packOptions := layer.PackOptions{TranslateOverlayWhiteouts: true}
-	uncompressed := layer.GenerateInsertLayer(dir, "/", false, &packOptions)
+	var uncompressed io.ReadCloser
+	var compressor mutate.Compressor
+	if layerType == "tar" {
+		uncompressed = layer.GenerateInsertLayer(dir, "/", false, &packOptions)
+		compressor = mutate.GzipCompressor
+	} else if layerType == "squashfs" {
+		uncompressed, err = squashfs.MakeSquashfs(config.RootFSDir, dir, nil)
+		if err != nil {
+			return false, err
+		}
+		compressor = mutate.NewNoopCompressor(stackeroci.MediaTypeLayerSquashfs)
+	} else {
+		return false, errors.Errorf("unknown layer type %s", layerType)
+	}
 	defer uncompressed.Close()
 
 	now := time.Now()
@@ -145,7 +168,7 @@ func generateLayer(config types.StackerConfig, mutator *mutate.Mutator, name str
 		EmptyLayer: false,
 	}
 
-	desc, err := mutator.Add(context.Background(), uncompressed, history)
+	desc, err := mutator.Add(context.Background(), uncompressed, history, compressor)
 	if err != nil {
 		return false, err
 	}
@@ -190,7 +213,7 @@ func generateLayer(config types.StackerConfig, mutator *mutate.Mutator, name str
 	return true, ovl.mount(config, name)
 }
 
-func RepackOverlay(config types.StackerConfig, name string) error {
+func RepackOverlay(config types.StackerConfig, name string, layerType string) error {
 	oci, err := umoci.OpenLayout(config.OCIDir)
 	if err != nil {
 		return err
@@ -215,7 +238,7 @@ func RepackOverlay(config types.StackerConfig, name string) error {
 	mutated := false
 	// generate blobs for each build layer
 	for _, buildLayer := range ovl.BuiltLayers {
-		didMutate, err := generateLayer(config, mutator, buildLayer)
+		didMutate, err := generateLayer(config, mutator, buildLayer, layerType)
 		if err != nil {
 			return err
 		}
@@ -224,7 +247,7 @@ func RepackOverlay(config types.StackerConfig, name string) error {
 		}
 	}
 
-	didMutate, err := generateLayer(config, mutator, name)
+	didMutate, err := generateLayer(config, mutator, name, layerType)
 	if err != nil {
 		return err
 	}
