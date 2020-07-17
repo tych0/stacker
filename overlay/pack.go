@@ -34,8 +34,9 @@ func overlayPath(config types.StackerConfig, d digest.Digest, subdirs ...string)
 	return path.Join(dirs...)
 }
 
-func (o *overlay) Unpack(ociDir, tag, name string) error {
-	oci, err := umoci.OpenLayout(ociDir)
+func (o *overlay) Unpack(tag, name, layerType string, buildOnly bool) error {
+	cacheDir := path.Join(o.config.StackerDir, "layer-bases", "oci")
+	oci, err := umoci.OpenLayout(cacheDir)
 	if err != nil {
 		return err
 	}
@@ -74,7 +75,7 @@ func (o *overlay) Unpack(ociDir, tag, name string) error {
 			pool.Add(func(ctx context.Context) error {
 				return container.RunUmociSubcommand(o.config, []string{
 					"--tag", tag,
-					"--oci-path", ociDir,
+					"--oci-path", cacheDir,
 					"--bundle-path", contents,
 					"unpack-one",
 					"--digest", layer.Digest.String(),

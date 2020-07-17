@@ -2,15 +2,20 @@ package btrfs
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/anuvu/stacker/container"
 	"github.com/anuvu/stacker/lib"
 	"github.com/anuvu/stacker/log"
 	stackeroci "github.com/anuvu/stacker/oci"
+	"github.com/anuvu/stacker/squashfs"
+	"github.com/opencontainers/go-digest"
 	ispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/opencontainers/umoci"
 	"github.com/opencontainers/umoci/oci/casext"
@@ -18,27 +23,39 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (b *btrfs) Unpack(ociDir, tag, name string) error {
-	oci, err := umoci.OpenLayout(ociDir)
+func (b *btrfs) Unpack(tag, name, layerType string, buildOnly bool) error {
+	oci, err := umoci.OpenLayout(b.c.OCIDir)
 	if err != nil {
 		return err
 	}
 	defer oci.Close()
 
-	manifest, err := stackeroci.LookupManifest(oci, tag)
+	cacheDir := path.Join(b.c.StackerDir, "layer-bases", "oci")
+	cacheOCI, err := umoci.OpenLayout(cacheDir)
+	if err != nil {
+		return err
+	}
+	defer cacheOCI.Close()
+
+	sourceLayerType := "tar"
+	manifest, err := stackeroci.LookupManifest(cacheOCI, tag)
 	if err != nil {
 		return err
 	}
 
+	if manifest.Layers[0].MediaType == stackeroci.MediaTypeLayerSquashfs {
+		sourceLayerType = "squashfs"
+	}
+
 	bundlePath := path.Join(b.c.RootFSDir, name)
 
-	lastLayer, highestHash, err := b.findPreviousExtraction(oci, manifest)
+	lastLayer, highestHash, err := b.findPreviousExtraction(cacheOCI, manifest)
 	if err != nil {
 		return err
 	}
 
 	if highestHash != "" {
-		dps, err := oci.ResolveReference(context.Background(), tag)
+		dps, err := cacheOCI.ResolveReference(context.Background(), tag)
 		if err != nil {
 			return err
 		}
@@ -78,7 +95,7 @@ func (b *btrfs) Unpack(ociDir, tag, name string) error {
 	}
 
 	err = container.RunUmociSubcommand(b.c, []string{
-		"--oci-path", ociDir,
+		"--oci-path", cacheDir,
 		"--tag", tag,
 		"--bundle-path", bundlePath,
 		"unpack",
@@ -106,7 +123,103 @@ func (b *btrfs) Unpack(ociDir, tag, name string) error {
 		return err
 	}
 
-	return nil
+	if buildOnly {
+		return nil
+	}
+
+	// if the layer types are the same, just copy it over and be done
+	if layerType == sourceLayerType {
+		log.Debugf("same layer type, no translation required")
+		// We just copied it to the cache, now let's copy that over to our image.
+		err = lib.ImageCopy(lib.ImageCopyOpts{
+			Src:  fmt.Sprintf("oci:%s:%s", cacheDir, tag),
+			Dest: fmt.Sprintf("oci:%s:%s", b.c.OCIDir, name),
+		})
+		return err
+	}
+	log.Debugf("translating from %s to %s", sourceLayerType, layerType)
+
+	var blob io.ReadCloser
+
+	rootfsPath := path.Join(bundlePath, "rootfs")
+	// otherwise, render the right layer type
+	if layerType == "squashfs" {
+		// sourced a non-squashfs image and wants a squashfs layer,
+		// let's generate one.
+		blob, err = squashfs.MakeSquashfs(b.c.OCIDir, rootfsPath, nil)
+		if err != nil {
+			return err
+		}
+		defer blob.Close()
+	} else {
+		blob = layer.GenerateInsertLayer(path.Join(bundlePath, "rootfs"), "/", false, nil)
+		defer blob.Close()
+	}
+
+	layerDigest, layerSize, err := oci.PutBlob(context.Background(), blob)
+	if err != nil {
+		return err
+	}
+
+	cacheManifest, err := stackeroci.LookupManifest(oci, tag)
+	if err != nil {
+		return err
+	}
+
+	config, err := stackeroci.LookupConfig(oci, cacheManifest.Config)
+	if err != nil {
+		return err
+	}
+
+	layerMediaType := stackeroci.MediaTypeLayerSquashfs
+	if layerType == "tar" {
+		layerMediaType = ispec.MediaTypeImageLayerGzip
+	}
+
+	desc := ispec.Descriptor{
+		MediaType: layerMediaType,
+		Digest:    layerDigest,
+		Size:      layerSize,
+	}
+
+	manifest.Layers = []ispec.Descriptor{desc}
+	config.RootFS.DiffIDs = []digest.Digest{layerDigest}
+	now := time.Now()
+	config.History = []ispec.History{{
+		Created:   &now,
+		CreatedBy: fmt.Sprintf("stacker layer-type mismatch repack of %s", tag),
+	}}
+
+	configDigest, configSize, err := oci.PutBlobJSON(context.Background(), config)
+	if err != nil {
+		return err
+	}
+
+	manifest.Config = ispec.Descriptor{
+		MediaType: ispec.MediaTypeImageConfig,
+		Digest:    configDigest,
+		Size:      configSize,
+	}
+
+	manifestDigest, manifestSize, err := oci.PutBlobJSON(context.Background(), manifest)
+	if err != nil {
+		return err
+	}
+
+	desc = ispec.Descriptor{
+		MediaType: ispec.MediaTypeImageManifest,
+		Digest:    manifestDigest,
+		Size:      manifestSize,
+	}
+
+	err = oci.UpdateReference(context.Background(), name, desc)
+	if err != nil {
+		return err
+	}
+
+	return b.UpdateFSMetadata(name, casext.DescriptorPath{
+		Walk: []ispec.Descriptor{desc},
+	})
 }
 
 func (b *btrfs) findPreviousExtraction(oci casext.Engine, manifest ispec.Manifest) (int, string, error) {
