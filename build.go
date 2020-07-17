@@ -475,6 +475,8 @@ func (b *Builder) Build(file string) error {
 			return err
 		}
 
+		manifest, _ := mutator.Manifest(context.Background())
+		fmt.Println("build resulting manifest is", manifest.Layers)
 		err = s.UpdateFSMetadata(name, newPath)
 		if err != nil {
 			return err

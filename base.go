@@ -74,6 +74,7 @@ func umociInit(o BaseLayerOpts) error {
 // Finally, if the layer is a build only layer, this code simply initializes
 // the filesystem in roots to the built tag's filesystem.
 func SetupRootfs(o BaseLayerOpts, sfm types.StackerFiles) error {
+	fmt.Println("deleting", o.Name)
 	o.Storage.Delete(o.Name)
 	if o.Layer.From.Type == types.BuiltLayer {
 		// For built type images, we already have the base fs content

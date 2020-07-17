@@ -18,10 +18,16 @@ centos:
 EOF
     echo 1 > import
     stacker build
+    echo
+    echo
     echo 2 > import
     stacker build
+    echo
+    echo
     echo 3 > import
     stacker build
+    echo
+    echo
     echo 4 > import
     stacker build
 }

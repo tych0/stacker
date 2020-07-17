@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path"
@@ -263,6 +264,7 @@ func doRepack(ctx *cli.Context) error {
 		return err
 	}
 
+	fmt.Println("meta.From", meta.From)
 	mutator, err := mutate.New(oci, meta.From)
 	if err != nil {
 		return err

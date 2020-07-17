@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"path"
 	"strings"
 	"time"
@@ -59,6 +60,7 @@ func (b *btrfs) Unpack(tag, name, layerType string, buildOnly bool) error {
 		if err != nil {
 			return err
 		}
+		fmt.Println("looking for manifest", dps)
 
 		// Delete the previously created working snapshot; we're about
 		// to create a new one.
@@ -130,11 +132,17 @@ func (b *btrfs) Unpack(tag, name, layerType string, buildOnly bool) error {
 	// if the layer types are the same, just copy it over and be done
 	if layerType == sourceLayerType {
 		log.Debugf("same layer type, no translation required")
+		fmt.Println("copying from", cacheDir, tag, "to", b.c.OCIDir, name)
 		// We just copied it to the cache, now let's copy that over to our image.
 		err = lib.ImageCopy(lib.ImageCopyOpts{
-			Src:  fmt.Sprintf("oci:%s:%s", cacheDir, tag),
-			Dest: fmt.Sprintf("oci:%s:%s", b.c.OCIDir, name),
+			Src:      fmt.Sprintf("oci:%s:%s", cacheDir, tag),
+			Dest:     fmt.Sprintf("oci:%s:%s", b.c.OCIDir, name),
+			Progress: os.Stdout,
 		})
+		content, _ := exec.Command("ls", "-al", path.Join(cacheDir, "blobs", "sha256")).CombinedOutput()
+		fmt.Println("cached blobs", string(content))
+		content, _ = exec.Command("ls", "-al", path.Join(b.c.OCIDir, "blobs", "sha256")).CombinedOutput()
+		fmt.Println("cached blobs", string(content))
 		return err
 	}
 	log.Debugf("translating from %s to %s", sourceLayerType, layerType)
@@ -161,12 +169,7 @@ func (b *btrfs) Unpack(tag, name, layerType string, buildOnly bool) error {
 		return err
 	}
 
-	cacheManifest, err := stackeroci.LookupManifest(oci, tag)
-	if err != nil {
-		return err
-	}
-
-	config, err := stackeroci.LookupConfig(oci, cacheManifest.Config)
+	config, err := stackeroci.LookupConfig(cacheOCI, manifest.Config)
 	if err != nil {
 		return err
 	}
@@ -182,6 +185,7 @@ func (b *btrfs) Unpack(tag, name, layerType string, buildOnly bool) error {
 		Size:      layerSize,
 	}
 
+	fmt.Println("generated other layer", layerDigest)
 	manifest.Layers = []ispec.Descriptor{desc}
 	config.RootFS.DiffIDs = []digest.Digest{layerDigest}
 	now := time.Now()
@@ -279,6 +283,7 @@ func prepareUmociMetadata(storage *btrfs, name string, bundlePath string, dp cas
 	_, err := os.Stat(path.Join(bundlePath, "umoci.json"))
 	if err == nil {
 		mtreePath := path.Join(bundlePath, mtreeName+".mtree")
+		fmt.Println("looking for mtree path", mtreePath)
 		_, err := os.Stat(mtreePath)
 		if err == nil {
 			// The best case: this layer's mtree and metadata match
@@ -300,6 +305,7 @@ func prepareUmociMetadata(storage *btrfs, name string, bundlePath string, dp cas
 			if !strings.HasSuffix(ent.Name(), ".mtree") {
 				continue
 			}
+			fmt.Println("old mtree", ent.Name())
 
 			generated = true
 			oldMtreePath := path.Join(bundlePath, ent.Name())

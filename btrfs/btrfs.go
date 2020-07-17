@@ -165,6 +165,7 @@ func (b *btrfs) Restore(source string, target string) error {
 func (b *btrfs) UpdateFSMetadata(name string, newPath casext.DescriptorPath) error {
 	rootPath := path.Join(b.c.RootFSDir, name)
 	newName := strings.Replace(newPath.Descriptor().Digest.String(), ":", "_", 1) + ".mtree"
+	fmt.Println("updating fs metadata for", name, "pointing to", newPath.Descriptor().Digest.String())
 
 	infos, err := ioutil.ReadDir(rootPath)
 	if err != nil {
