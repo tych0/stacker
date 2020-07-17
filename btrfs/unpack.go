@@ -37,6 +37,11 @@ func (b *btrfs) Unpack(tag, name, layerType string, buildOnly bool) error {
 		return err
 	}
 	defer cacheOCI.Close()
+	fmt.Println("beginning of Unpack")
+	content, _ := exec.Command("ls", "-al", path.Join(cacheDir, "blobs", "sha256")).CombinedOutput()
+	fmt.Println("cached blobs", string(content))
+	content, _ = exec.Command("ls", "-al", path.Join(b.c.OCIDir, "blobs", "sha256")).CombinedOutput()
+	fmt.Println("output blobs", string(content))
 
 	sourceLayerType := "tar"
 	manifest, err := stackeroci.LookupManifest(cacheOCI, tag)
@@ -54,6 +59,11 @@ func (b *btrfs) Unpack(tag, name, layerType string, buildOnly bool) error {
 	if err != nil {
 		return err
 	}
+	fmt.Println("after find previous extraction")
+	content, _ = exec.Command("ls", "-al", path.Join(cacheDir, "blobs", "sha256")).CombinedOutput()
+	fmt.Println("cached blobs", string(content))
+	content, _ = exec.Command("ls", "-al", path.Join(b.c.OCIDir, "blobs", "sha256")).CombinedOutput()
+	fmt.Println("output blobs", string(content))
 
 	if highestHash != "" {
 		dps, err := cacheOCI.ResolveReference(context.Background(), tag)
@@ -82,6 +92,12 @@ func (b *btrfs) Unpack(tag, name, layerType string, buildOnly bool) error {
 				return err
 			}
 
+			fmt.Println("after prepare umoci metadata")
+			content, _ = exec.Command("ls", "-al", path.Join(cacheDir, "blobs", "sha256")).CombinedOutput()
+			fmt.Println("cached blobs", string(content))
+			content, _ = exec.Command("ls", "-al", path.Join(b.c.OCIDir, "blobs", "sha256")).CombinedOutput()
+			fmt.Println("output blobs", string(content))
+
 			return nil
 		}
 	}
@@ -95,6 +111,11 @@ func (b *btrfs) Unpack(tag, name, layerType string, buildOnly bool) error {
 	if err != nil {
 		return err
 	}
+	fmt.Println("after clean umoci metadata")
+	content, _ = exec.Command("ls", "-al", path.Join(cacheDir, "blobs", "sha256")).CombinedOutput()
+	fmt.Println("cached blobs", string(content))
+	content, _ = exec.Command("ls", "-al", path.Join(b.c.OCIDir, "blobs", "sha256")).CombinedOutput()
+	fmt.Println("output blobs", string(content))
 
 	err = container.RunUmociSubcommand(b.c, []string{
 		"--oci-path", cacheDir,
@@ -106,6 +127,12 @@ func (b *btrfs) Unpack(tag, name, layerType string, buildOnly bool) error {
 	if err != nil {
 		return err
 	}
+
+	fmt.Println("after subcommand unpack")
+	content, _ = exec.Command("ls", "-al", path.Join(cacheDir, "blobs", "sha256")).CombinedOutput()
+	fmt.Println("cached blobs", string(content))
+	content, _ = exec.Command("ls", "-al", path.Join(b.c.OCIDir, "blobs", "sha256")).CombinedOutput()
+	fmt.Println("output blobs", string(content))
 
 	// Ok, now that we have extracted and computed the mtree, let's
 	// re-snapshot. The problem is that the snapshot in the callback won't

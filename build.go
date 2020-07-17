@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"os/user"
 	"path"
 	"runtime"
@@ -281,6 +282,13 @@ func (b *Builder) Build(file string) error {
 			}
 			continue
 		}
+
+		fmt.Println("before repack")
+		cacheDir := path.Join(opts.Config.StackerDir, "layer-bases", "oci")
+		content, _ := exec.Command("ls", "-al", path.Join(cacheDir, "blobs", "sha256")).CombinedOutput()
+		fmt.Println("cached blobs", string(content))
+		content, _ = exec.Command("ls", "-al", path.Join(opts.Config.OCIDir, "blobs", "sha256")).CombinedOutput()
+		fmt.Println("output blobs", string(content))
 
 		log.Infof("generating layer for %s", name)
 		err = s.Repack(opts.Config.OCIDir, name, opts.LayerType)
