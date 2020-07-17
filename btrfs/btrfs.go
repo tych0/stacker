@@ -20,6 +20,7 @@ import (
 	"github.com/anuvu/stacker/mount"
 	"github.com/anuvu/stacker/types"
 	"github.com/freddierice/go-losetup"
+	ispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/opencontainers/umoci"
 	"github.com/opencontainers/umoci/oci/casext"
 	"github.com/pkg/errors"
@@ -162,7 +163,7 @@ func (b *btrfs) Restore(source string, target string) error {
 	return nil
 }
 
-func (b *btrfs) UpdateFSMetadata(name string, newPath casext.DescriptorPath) error {
+func (b *btrfs) UpdateFSMetadata(name string, newPath casext.DescriptorPath, manifest ispec.Manifest) error {
 	rootPath := path.Join(b.c.RootFSDir, name)
 	newName := strings.Replace(newPath.Descriptor().Digest.String(), ":", "_", 1) + ".mtree"
 

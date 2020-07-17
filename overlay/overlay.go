@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"path"
 	"strings"
 	"syscall"
@@ -18,6 +19,7 @@ import (
 	"github.com/anuvu/stacker/log"
 	"github.com/anuvu/stacker/mount"
 	"github.com/anuvu/stacker/types"
+	ispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/opencontainers/umoci/oci/casext"
 	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
@@ -209,10 +211,60 @@ func (o *overlay) Detach() error {
 	return nil
 }
 
-func (o *overlay) UpdateFSMetadata(name string, path casext.DescriptorPath) error {
-	// no-op; we get our layer contents by just looking at the contents of
-	// the upperdir
-	return nil
+func (o *overlay) UpdateFSMetadata(name string, unused casext.DescriptorPath, manifest ispec.Manifest) error {
+	ovl := overlayMetadata{Manifest: manifest}
+	err := ovl.write(o.config, name)
+	if err != nil {
+		return err
+	}
+
+	// this is kind of a hack. this is called from two places, 1. when
+	// re-generating a layer in a different --layer-type and 2. after a
+	// build. in case 2. we're done, because the repack has already
+	// generated the overlay dir for the layer hash. but in case 1., we
+	// need to do it ourselves. let's just do it here vs. adding another
+	// storage hook
+	if len(manifest.Layers) == 0 {
+		// special case: from: scratch layers with nothing added during
+		// the build.
+		return nil
+	}
+	p := overlayPath(o.config, manifest.Layers[len(manifest.Layers)-1].Digest, "overlay")
+	if _, err := os.Stat(p); err == nil {
+		return nil
+	}
+
+	overlayPath := path.Join(o.config.RootFSDir, name, "overlay")
+	content, _ := exec.Command("ls", "-al", overlayPath).CombinedOutput()
+	fmt.Println("before umount", string(content))
+	err = unix.Unmount(path.Join(o.config.RootFSDir, name, "rootfs"), 0)
+	if err != nil {
+		return errors.Wrapf(err, "couldn't umount %s rootfs", name)
+	}
+
+	layerParentDir := path.Join(o.config.RootFSDir, safeOverlayName(manifest.Layers[len(manifest.Layers)-1].Digest))
+	err = os.MkdirAll(layerParentDir, 0755)
+	if err != nil {
+		return errors.Wrapf(err, "couldn't mkdir for overlay move target")
+	}
+
+	content, _ = exec.Command("ls", "-al", overlayPath).CombinedOutput()
+	fmt.Println("before rename name/overlay", path.Join(o.config.RootFSDir, name, "rootfs"), string(content))
+	content, _ = exec.Command("ls", "-al", path.Join(o.config.RootFSDir, name, "rootfs")).CombinedOutput()
+	fmt.Println("before rename name/rootfs", string(content))
+	content, _ = exec.Command("ls", "-al", o.config.RootFSDir).CombinedOutput()
+	fmt.Println("before rename roots/", string(content))
+	err = os.Rename(overlayPath, p)
+	if err != nil {
+		return errors.Wrapf(err, "couldn't rename %s overlay", name)
+	}
+
+	err = os.MkdirAll(overlayPath, 0755)
+	if err != nil {
+		return errors.Wrapf(err, "couldn't re-make overlay dir %s", name)
+	}
+
+	return ovl.mount(o.config, name)
 }
 
 func (o *overlay) Finalize(thing string) error {

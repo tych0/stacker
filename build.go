@@ -298,6 +298,9 @@ func (b *Builder) Build(file string) error {
 			return errors.Wrapf(err, "mutator failed")
 		}
 
+		manifesta, _ := mutator.Manifest(context.Background())
+		fmt.Println("manifest A", manifesta.Layers)
+
 		imageConfig, err := mutator.Config(context.Background())
 		if err != nil {
 			return err
@@ -475,7 +478,13 @@ func (b *Builder) Build(file string) error {
 			return err
 		}
 
-		err = s.UpdateFSMetadata(name, newPath)
+		manifest, err := mutator.Manifest(context.Background())
+		if err != nil {
+			return err
+		}
+		fmt.Println("manifest", manifest.Layers)
+
+		err = s.UpdateFSMetadata(name, newPath, manifest)
 		if err != nil {
 			return err
 		}

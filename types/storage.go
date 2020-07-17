@@ -1,6 +1,7 @@
 package types
 
 import (
+	ispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/opencontainers/umoci/oci/casext"
 )
 
@@ -39,7 +40,7 @@ type Storage interface {
 	// files, or anything else needed) for generating deltas. This is used
 	// after e.g. a build is complete, but before the snapshot is
 	// Finalize()d.
-	UpdateFSMetadata(name string, path casext.DescriptorPath) error
+	UpdateFSMetadata(name string, path casext.DescriptorPath, manifest ispec.Manifest) error
 
 	// Finalize should seal the tag so it can no longer be modified
 	// (although it will be used later during Repack(), but in a read only

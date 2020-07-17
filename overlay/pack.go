@@ -2,6 +2,7 @@ package overlay
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
@@ -52,6 +53,7 @@ func (o *overlay) Unpack(ociDir, tag, name string) error {
 
 	for _, layer := range manifest.Layers {
 		contents := overlayPath(o.config, layer.Digest, "overlay")
+		fmt.Println("individual layer going to", contents)
 		switch layer.MediaType {
 		case stackeroci.MediaTypeLayerSquashfs:
 			// TODO: we can do something smart here, we don't even
@@ -254,6 +256,7 @@ func RepackOverlay(config types.StackerConfig, name string, layerType string) er
 
 	// if we didn't do anything, don't do anything :)
 	if !didMutate && !mutated {
+		fmt.Println("didn't mutate overlay")
 		return nil
 	}
 

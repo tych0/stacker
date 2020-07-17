@@ -116,7 +116,7 @@ func (ovl overlayMetadata) mount(config types.StackerConfig, tag string) error {
 	overlayArgs.WriteString(path.Join(config.RootFSDir, tag, "work"))
 
 	rootfs := path.Join(config.RootFSDir, tag, "rootfs")
-	log.Debugf("mount overlay args %s", overlayArgs.String())
+	log.Debugf("mount overlay args %s to %s", overlayArgs.String(), rootfs)
 	err := unix.Mount("overlay", rootfs, "overlay", 0, overlayArgs.String())
 	return errors.Wrapf(err, "failed to mount overlay for %s", tag)
 }

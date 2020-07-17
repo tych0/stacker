@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path"
 	"time"
 
@@ -223,6 +224,11 @@ func setupContainersImageRootfs(o BaseLayerOpts) error {
 
 	bundlePath := path.Join(o.Config.RootFSDir, o.Name)
 	rootfsPath := path.Join(bundlePath, "rootfs")
+	fmt.Println("generating layer on", rootfsPath)
+	content, _ := exec.Command("ls", "-al", rootfsPath).CombinedOutput()
+	fmt.Println(string(content))
+	content, _ = exec.Command("ls", "-al", path.Join(bundlePath, "overlay")).CombinedOutput()
+	fmt.Println(string(content))
 	// otherwise, render the right layer type
 	if o.LayerType == "squashfs" {
 		// sourced a non-squashfs image and wants a squashfs layer,
@@ -243,6 +249,10 @@ func setupContainersImageRootfs(o BaseLayerOpts) error {
 	if err != nil {
 		return err
 	}
+
+	content, _ = exec.Command("ls", "-al", rootfsPath).CombinedOutput()
+	fmt.Println(string(content))
+	fmt.Println("generated squashfs layer", layerDigest)
 
 	cacheManifest, err := stackeroci.LookupManifest(cacheOCI, cacheTag)
 	if err != nil {
@@ -301,9 +311,11 @@ func setupContainersImageRootfs(o BaseLayerOpts) error {
 		return err
 	}
 
+	content, _ = exec.Command("ls", "-al", rootfsPath).CombinedOutput()
+	fmt.Println("just before calling UpdateFSMetadata", rootfsPath, string(content))
 	return o.Storage.UpdateFSMetadata(o.Name, casext.DescriptorPath{
 		Walk: []ispec.Descriptor{desc},
-	})
+	}, manifest)
 }
 
 func setupTarRootfs(o BaseLayerOpts) error {
