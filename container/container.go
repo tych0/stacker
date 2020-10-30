@@ -12,20 +12,16 @@ import (
 	"github.com/pkg/errors"
 )
 
-func ResolveIdmapSet() (*idmap.IdmapSet, error) {
-	// TODO: we should try to use user namespaces when we're root as well.
-	// For now we don't.
-	if os.Geteuid() == 0 {
-		log.Debugf("No uid mappings, running as root")
-		return nil, nil
-	}
-
+func ResolveCurrentIdmapSet() (*idmap.IdmapSet, error) {
 	currentUser, err := user.Current()
 	if err != nil {
 		return nil, errors.Wrapf(err, "couldn't resolve current user")
 	}
+	return ResolveIdmapSet(currentUser.Username)
+}
 
-	idmapSet, err := idmap.DefaultIdmapSet("", currentUser.Username)
+func ResolveIdmapSet(user string) (*idmap.IdmapSet, error) {
+	idmapSet, err := idmap.DefaultIdmapSet("", user)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed parsing /etc/sub{u,g}idmap")
 	}
@@ -60,7 +56,7 @@ func ResolveIdmapSet() (*idmap.IdmapSet, error) {
 	return idmapSet, nil
 }
 
-func runInUserns(idmapSet *idmap.IdmapSet, userCmd []string, msg string) error {
+func RunInUserns(idmapSet *idmap.IdmapSet, userCmd []string, msg string) error {
 	if idmapSet == nil {
 		return errors.Errorf("no subuids!")
 	}
@@ -100,7 +96,18 @@ func runInUserns(idmapSet *idmap.IdmapSet, userCmd []string, msg string) error {
 // A wrapper which runs things in a userns if we're an unprivileged user with
 // an idmap, or runs things on the host if we're root and don't.
 func MaybeRunInUserns(userCmd []string, msg string) error {
-	idmapSet, err := ResolveIdmapSet()
+	// TODO: we should try to use user namespaces when we're root as well.
+	// For now we don't.
+	if os.Geteuid() == 0 {
+		log.Debugf("No uid mappings, running as root")
+		cmd := exec.Command(userCmd[0], userCmd[1:]...)
+		cmd.Stdin = nil
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		return errors.Wrapf(cmd.Run(), msg)
+	}
+
+	idmapSet, err := ResolveCurrentIdmapSet()
 	if err != nil {
 		return err
 	}
@@ -110,14 +117,9 @@ func MaybeRunInUserns(userCmd []string, msg string) error {
 			return errors.Errorf("no idmap and not root, can't run %v", userCmd)
 		}
 
-		cmd := exec.Command(userCmd[0], userCmd[1:]...)
-		cmd.Stdin = nil
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		return errors.Wrapf(cmd.Run(), msg)
 	}
 
-	return runInUserns(idmapSet, userCmd, msg)
+	return RunInUserns(idmapSet, userCmd, msg)
 }
 
 func RunUmociSubcommand(config types.StackerConfig, args []string) error {
