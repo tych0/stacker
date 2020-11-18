@@ -14,7 +14,7 @@ function teardown() {
     # get a linux to do stuff on
     # (double copy so we can take advantage of caching)
     mkdir -p .stacker/layer-bases
-    skopeo --insecure-policy copy docker://centos:latest oci:.stacker/layer-bases/oci:centos
+    skopeo --insecure-policy copy $CENTOS_OCI oci:.stacker/layer-bases/oci:centos
     skopeo --insecure-policy copy oci:.stacker/layer-bases/oci:centos oci:test-oci:a-linux
 
     cat > stacker.yaml <<EOF
@@ -215,8 +215,8 @@ EOF
     cat > stacker.yaml <<EOF
 t1:
     from:
-        type: docker
-        url: docker://centos:latest
+        type: oci
+        url: $CENTOS_OCI
     run: |
         touch t1
 
@@ -251,8 +251,8 @@ EOF
     cat > stacker.yaml <<EOF
 parent:
     from:
-        type: docker
-        url: docker://centos:latest
+        type: oci
+        url: $CENTOS_OCI
     run: |
         touch /000
         chmod 000 /000

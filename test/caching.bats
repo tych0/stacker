@@ -34,7 +34,7 @@ test:
         type: oci
         url: oci:base
 EOF
-    skopeo --insecure-policy copy docker://centos:latest oci:oci:base
+    skopeo --insecure-policy copy $CENTOS_OCI oci:oci:base
     stacker build
     skopeo --insecure-policy copy docker://ubuntu:latest oci:oci:base
     stacker build
@@ -46,8 +46,8 @@ EOF
     cat > stacker.yaml <<EOF
 build-base:
     from:
-        type: docker
-        url: docker://centos:latest
+        type: oci
+        url: $CENTOS_OCI
 base:
     from:
         type: built
@@ -69,8 +69,8 @@ EOF
     cat > stacker.yaml <<EOF
 import-cache:
     from:
-        type: docker
-        url: docker://centos:latest
+        type: oci
+        url: $CENTOS_OCI
     import:
         - link/foo
     run: cp /stacker/foo/zomg /zomg
@@ -93,8 +93,8 @@ EOF
     cat > stacker.yaml <<EOF
 a:
     from:
-        type: docker
-        url: docker://centos:latest
+        type: oci
+        url: $CENTOS_OCI
     import:
         - foo
     run: |
@@ -109,8 +109,8 @@ EOF
     cat > stacker.yaml <<EOF
 a:
     from:
-        type: docker
-        url: docker://centos:latest
+        type: oci
+        url: $CENTOS_OCI
     import:
         - foo
     run: |
@@ -124,8 +124,8 @@ EOF
     cat > stacker.yaml <<"EOF"
 bind-test:
     from:
-        type: docker
-        url: docker://centos:latest
+        type: oci
+        url: $CENTOS_OCI
     import:
         - tree1/foo/zomg
     binds:
@@ -161,8 +161,8 @@ EOF
     cat > stacker.yaml <<"EOF"
 mode-test:
     from:
-        type: docker
-        url: docker://centos:latest
+        type: oci
+        url: $CENTOS_OCI
     import:
         - executable
     run: cp /stacker/executable /executable
