@@ -19,6 +19,7 @@ lint: $(GO_SRC)
 
 check-%: stacker
 	[ -d ./test/centos ] || skopeo --insecure-policy copy docker://centos:latest oci:./test/centos:latest
+	[ -d ./test/ubuntu ] || skopeo --insecure-policy copy docker://ubuntu:latest oci:./test/ubuntu:latest
 	sudo -E "PATH=$$PATH" STORAGE_TYPE=$(subst check-,,$@) $(BATS) --jobs "$(JOBS)" -t $(patsubst %,test/%.bats,$(TEST))
 
 # make check TEST=basic will run only the basic test.
@@ -33,4 +34,4 @@ vendorup:
 .PHONY: clean
 clean:
 	-rm -r stacker
-	-rm -r ./test/centos
+	-rm -r ./test/centos ./test/ubuntu

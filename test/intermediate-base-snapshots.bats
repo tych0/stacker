@@ -62,8 +62,8 @@ function test_intermediate_layers {
     cat > stacker.yaml <<EOF
 test:
     from:
-        type: docker
-        url: docker://ubuntu:latest
+        type: oci
+        url: $UBUNTU_OCI
 
 EOF
     stacker build --leave-unladen --layer-type=$layer_type
@@ -131,7 +131,7 @@ EOF
 
 @test "intermediate base layers are used" {
     require_storage btrfs
-    skopeo --insecure-policy copy docker://ubuntu:latest oci:oci-import:ubuntu
+    skopeo --insecure-policy copy $UBUNTU_OCI oci:oci-import:ubuntu
     test_intermediate_layers_used tar oci-import:ubuntu
 }
 
@@ -140,8 +140,8 @@ EOF
     cat > stacker.yaml <<EOF
 ubuntu:
     from:
-        type: docker
-        url: docker://ubuntu:latest
+        type: oci
+        url: $UBUNTU_OCI
     run:
         touch /foo
 EOF
@@ -160,8 +160,8 @@ function test_startfrom_respected {
     cat > stacker.yaml <<EOF
 ubuntu:
     from:
-        type: docker
-        url: docker://ubuntu:latest
+        type: oci
+        url: $UBUNTU_OCI
     run:
         touch /foo
 EOF

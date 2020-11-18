@@ -36,7 +36,7 @@ test:
 EOF
     skopeo --insecure-policy copy $CENTOS_OCI oci:oci:base
     stacker build
-    skopeo --insecure-policy copy docker://ubuntu:latest oci:oci:base
+    skopeo --insecure-policy copy $UBUNTU_OCI oci:oci:base
     stacker build
     umoci unpack --image oci:test dest
     grep -q Ubuntu dest/rootfs/etc/issue
