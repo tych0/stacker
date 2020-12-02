@@ -114,12 +114,7 @@ func (o *overlay) Unpack(tag, name string) error {
 		return err
 	}
 
-	err = ovl.write(o.config, name)
-	if err != nil {
-		return err
-	}
-
-	return ovl.mount(o.config, name)
+	return ovl.write(o.config, name)
 }
 
 func (o *overlay) convertAndOutput(tag, name string, layerType types.LayerType) error {
@@ -505,11 +500,5 @@ func RepackOverlay(config types.StackerConfig, name string, layerTypes []types.L
 		return errors.Wrapf(err, "couldn't unmount old overlay")
 	}
 
-	err = ovl.write(config, name)
-	if err != nil {
-		return err
-	}
-
-	return ovl.mount(config, name)
-
+	return ovl.write(config, name)
 }
