@@ -2,7 +2,7 @@ load helpers
 
 function setup() {
     stacker_setup
-    stacker unpriv-setup
+    unpriv_setup
 }
 
 function teardown() {
@@ -29,8 +29,7 @@ child:
         echo "zomg" > /etc/000
         chmod 000 /etc/000
 EOF
-    chown -R $SUDO_USER:$SUDO_USER .
-    sudo -u $SUDO_USER "${ROOT_DIR}/stacker" --storage-type=$STORAGE_TYPE build
+    unpriv_stacker build
     umoci unpack --image oci:parent parent
     [ -f parent/rootfs/etc/000 ]
     [ "$(stat --format="%a" parent/rootfs/etc/000)" = "0" ]
@@ -61,8 +60,7 @@ layer1:
     run:
         - rm /favicon.ico
 EOF
-    chown -R $SUDO_USER:$SUDO_USER .
-    sudo -u $SUDO_USER "${ROOT_DIR}/stacker" --storage-type=$STORAGE_TYPE build
+    unpriv_stacker build
     umoci unpack --image oci:layer1 dest
 
     [ "$(sha .stacker/imports/centos/favicon.ico)" == "$(stacker_chroot sha /favicon.ico)" ]
@@ -83,8 +81,7 @@ centos:
     run: |
         cp /stacker/favicon.ico /favicon.ico
 EOF
-    chown -R $SUDO_USER:$SUDO_USER .
-    sudo -u $SUDO_USER "${ROOT_DIR}/stacker" build
+    unpriv_stacker build
     stacker clean
 }
 
@@ -104,8 +101,7 @@ centos:
     import:
         - import
 EOF
-    chown -R $SUDO_USER:$SUDO_USER .
-    sudo -u $SUDO_USER "${ROOT_DIR}/stacker" --storage-type=$STORAGE_TYPE build
+    unpriv_stacker build
     echo that > import/this
-    sudo -u $SUDO_USER "${ROOT_DIR}/stacker" --storage-type=$STORAGE_TYPE build
+    unpriv_stacker build
 }
