@@ -54,7 +54,7 @@ func main() {
 		cleanCmd,
 		inspectCmd,
 		grabCmd,
-		umociCmd,
+		internalGoCmd,
 		unprivSetupCmd,
 		gcCmd,
 		containerSetupCmd,
