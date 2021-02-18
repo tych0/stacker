@@ -12,7 +12,7 @@ stacker: $(GO_SRC) go.mod go.sum
 
 .PHONY: lint
 lint: $(GO_SRC)
-	go mod tidy
+	go mod tidy && ([ -z $(CI) ] || git diff --quiet)
 	go fmt ./... && ([ -z $(CI) ] || git diff --quiet)
 	bash test/static-analysis.sh
 	go test -tags "$(BUILD_TAGS)" ./...
