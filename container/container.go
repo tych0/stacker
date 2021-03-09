@@ -111,7 +111,7 @@ func MaybeRunInUserns(userCmd []string, msg string) error {
 	if os.Geteuid() == 0 {
 		log.Debugf("No uid mappings, running as root")
 		cmd := exec.Command(userCmd[0], userCmd[1:]...)
-		cmd.Stdin = nil
+		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		return errors.Wrapf(cmd.Run(), msg)
