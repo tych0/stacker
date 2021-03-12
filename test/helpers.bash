@@ -21,6 +21,7 @@ function sha() {
 
 function stacker_setup() {
     export TEST_TMPDIR=$(tmpd $BATS_TEST_NAME)
+    mount -t tmpfs -o size=2G tmpfs "$TEST_TMPDIR"
     cd $TEST_TMPDIR
 }
 

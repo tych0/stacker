@@ -1,6 +1,7 @@
 package stacker
 
 import (
+	"os"
 	"os/exec"
 	"strings"
 
@@ -31,7 +32,10 @@ func GitVersion(path string) (string, error) {
 	var vers string
 	// Obtain commit hash
 	args := []string{"-C", path, "describe", "--tags"}
-	output, err := exec.Command("git", args...).CombinedOutput()
+	cmd := exec.Command("git", args...)
+	cmd.Env = os.Environ()
+	cmd.Env = append(cmd.Env, "GIT_DISCOVERY_ACROSS_FILESYSTEM=true")
+	output, err := cmd.CombinedOutput()
 	if err == nil {
 		vers = strings.TrimSpace(string(output))
 	} else {
