@@ -23,7 +23,7 @@ func GetCommand(fs embed.FS, filename string, args ...string) (*exec.Cmd, func()
 	if err != nil {
 		return &exec.Cmd{}, nil, errors.WithStack(err)
 	}
-	defer mfd.Unmap()
+	//defer mfd.Unmap()
 
 	_, err = io.Copy(mfd, f)
 	if err != nil {
