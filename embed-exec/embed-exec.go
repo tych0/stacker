@@ -6,9 +6,11 @@ import (
 	"embed"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"os"
 	"os/exec"
 
-	"github.com/justincormack/go-memfd"
+	// "github.com/justincormack/go-memfd"
 	"github.com/pkg/errors"
 )
 
@@ -19,11 +21,17 @@ func GetCommand(fs embed.FS, filename string, args ...string) (*exec.Cmd, func()
 	}
 	defer f.Close()
 
-	mfd, err := memfd.Create()
+	mfd, err := ioutil.TempFile("", fmt.Sprintf("embed-exec-%s", filename))
 	if err != nil {
 		return &exec.Cmd{}, nil, errors.WithStack(err)
 	}
-	//defer mfd.Unmap()
+	defer mfd.Close()
+	defer os.Remove(mfd.Name())
+
+	err = mfd.Chmod(0777)
+	if err != nil {
+		return &exec.Cmd{}, nil, errors.WithStack(err)
+	}
 
 	_, err = io.Copy(mfd, f)
 	if err != nil {
@@ -31,6 +39,6 @@ func GetCommand(fs embed.FS, filename string, args ...string) (*exec.Cmd, func()
 		return &exec.Cmd{}, nil, errors.WithStack(err)
 	}
 
-	cmd := exec.Command(fmt.Sprintf("/proc/self/fd/%d", mfd.Fd()), args...)
+	cmd := exec.Command(mfd.Name(), args...)
 	return cmd, mfd.Close, nil
 }
